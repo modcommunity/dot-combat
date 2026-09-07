@@ -16,7 +16,7 @@ Health, damage and weapons for a Godot 4 shooter. Analytic hitboxes, determinist
 spread, lag-compensated hit registration, and an arsenal that simulates from commands
 so a client can predict its own fire and a server can re-run it authoritatively.
 
-Part of the [dot-*](../NOTES.md) family. Needs **dot-core**. Works with **dot-net**
+Part of the [dot-*](https://github.com/modcommunity) family. Needs **dot-core**. Works with **dot-net**
 and **dot-fps-controller** without importing either.
 
 ## Install
