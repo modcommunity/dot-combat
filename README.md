@@ -12,17 +12,13 @@ This asset, along with all the others, was built initially with **Claude Code** 
 I intend on reviewing code, testing, and editing documentation regularly. If you're interested in helping out, please let me know!
 
 ## Health, Damage and Weapons
-Health, damage and weapons for a Godot 4 shooter. Analytic hitboxes, deterministic
-spread, lag-compensated hit registration, and an arsenal that simulates from commands
-so a client can predict its own fire and a server can re-run it authoritatively.
+Health, damage and weapons for a Godot 4 shooter. Analytic hitboxes, deterministic spread, lag-compensated hit registration, and an arsenal that simulates from commands so a client can predict its own fire and a server can re-run it authoritatively.
 
-Part of the [dot-*](https://github.com/modcommunity) family. Needs **dot-core**. Works with **dot-net**
-and **dot-fps-controller** without importing either.
+Part of the [dot-*](https://github.com/modcommunity) family. Needs **dot-core**. Works with **dot-net** and **dot-fps-controller** without importing either.
 
 ## Install
 
-Copy `addons/dot_combat/` and `addons/dot_core/` into your project and enable both in
-*Project → Project Settings → Plugins*.
+Copy `addons/dot_combat/` and `addons/dot_core/` into your project and enable both in *Project → Project Settings → Plugins*.
 
 ## Use
 
@@ -49,15 +45,9 @@ for shot in arsenal.simulate_tick(tick, delta, command):
 
 A weapon decides that a shot *happened*. Something else decides what it *hit*.
 
-`DotArsenal.simulate_tick()` is a pure function of the command it is given and its own
-state — no device, no clock, no other node, no damage. It produces `DotShot`s. The
-owning client runs it optimistically and the server runs it authoritatively, and both
-reach the same shot from the same command, because the spread is a hash of the shot
-rather than a draw from a random stream.
+`DotArsenal.simulate_tick()` is a pure function of the command it is given and its own state — no device, no clock, no other node, no damage. It produces `DotShot`s. The owning client runs it optimistically and the server runs it authoritatively, and both reach the same shot from the same command, because the spread is a hash of the shot rather than a draw from a random stream.
 
-`DotCombatManager.resolve_shot()` traces those shots and applies the damage, and runs
-only where the game is authoritative. A client that resolved its own shots would be a
-client that decides who dies.
+`DotCombatManager.resolve_shot()` traces those shots and applies the damage, and runs only where the game is authoritative. A client that resolved its own shots would be a client that decides who dies.
 
 ## What is in the box
 
@@ -79,24 +69,15 @@ client that decides who dies.
 
 ## Three failure modes it is built around
 
-**A shot that agrees with itself.** Spread from a `RandomNumberGenerator` gives a
-different pattern on the client that predicted the shot and the server that re-ran it,
-and a third one on every reconciliation replay. `DotSpread` is a pure function of
-(shooter, tick, shot, pellet), so all three agree.
+**A shot that agrees with itself.** Spread from a `RandomNumberGenerator` gives a different pattern on the client that predicted the shot and the server that re-ran it, and a third one on every reconciliation replay. `DotSpread` is a pure function of (shooter, tick, shot, pellet), so all three agree.
 
-**A shot through a wall.** World geometry and entity hitboxes are traced together, the
-world hit shortens the search, and a tie between a hitbox and a wall surface goes to
-the wall. A player hugging cover is not shot through it.
+**A shot through a wall.** World geometry and entity hitboxes are traced together, the world hit shortens the search, and a tie between a hitbox and a wall surface goes to the wall. A player hugging cover is not shot through it.
 
-**A rewind that leaks.** Lag compensation moves every hitbox in the level into the
-past. Every path out of `resolve_shot()` restores it, including the refusal paths,
-because a rewind that is never undone leaves the world permanently in the past and the
-symptom is that shots quietly start missing for everyone.
+**A rewind that leaks.** Lag compensation moves every hitbox in the level into the past. Every path out of `resolve_shot()` restores it, including the refusal paths, because a rewind that is never undone leaves the world permanently in the past and the symptom is that shots quietly start missing for everyone.
 
 ## Lag compensation
 
-dot-combat does not depend on dot-net and does not name it. Two callables turn
-compensation on:
+dot-combat does not depend on dot-net and does not name it. Two callables turn compensation on:
 
 ```gdscript
 combat.rewind_fn = func(view_tick: float) -> void:
@@ -104,8 +85,7 @@ combat.rewind_fn = func(view_tick: float) -> void:
 combat.restore_fn = net.history.restore
 ```
 
-Unset, shots resolve against the present, which is correct for a listen server and
-wrong for anyone with latency.
+Unset, shots resolve against the present, which is correct for a listen server and wrong for anyone with latency.
 
 ## Validating
 
