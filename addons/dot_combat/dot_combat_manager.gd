@@ -4,7 +4,7 @@ extends Node
 
 ## Resolves shots into damage. The server-side half of dot-combat.
 ##
-## A [DotArsenal] decides that a shot happened; this decides what it hit and what that
+## Whoever made the shot decided that it happened; this decides what it hit and what that
 ## cost. The split is not cosmetic — the arsenal runs on both ends and this runs only
 ## where the game is authoritative, so a client can predict its own fire without ever
 ## being in a position to decide who dies.
@@ -287,6 +287,17 @@ func health_of(entity_id: int) -> DotHealth:
 	return _healths.get(entity_id)
 
 
+## Every registered hitbox set, for something outside the manager that has to trace.
+##
+## A projectile in flight is the case this exists for: it has to sweep the same world
+## the manager traces against, and rebuilding the list from the registry each tick
+## would walk every entity for every rocket. Returned rather than copied, so a caller
+## must not hold it across a registration.
+func hitbox_sets() -> Array[DotHitboxSet]:
+	return _set_list
+
+
+
 func hitboxes_of(entity_id: int) -> DotHitboxSet:
 	return _sets.get(entity_id)
 
@@ -335,7 +346,7 @@ func damage_type(id: StringName) -> DotDamageType:
 ## [b]Restoring the rewind happens on every path out of this method[/b], including the
 ## refusal paths. A rewind that leaks leaves the world in the past permanently.
 func resolve_shot(shot: DotShot, view_tick: float = -1.0) -> DotShot:
-	if shot == null or shot.weapon == null:
+	if shot == null:
 		return shot
 
 	var refusal := _validate_shot(shot)
@@ -352,7 +363,7 @@ func resolve_shot(shot: DotShot, view_tick: float = -1.0) -> DotShot:
 	# Nothing between here and _end_rewind may return early.
 	_trace_shot(shot)
 
-	if shot.weapon.splash_radius > 0.0:
+	if shot.splash_radius > 0.0:
 		_apply_splash(shot)
 
 	_end_rewind(rewound)
@@ -436,28 +447,27 @@ func _end_rewind(rewound: bool) -> void:
 
 
 func _trace_shot(shot: DotShot) -> void:
-	var weapon := shot.weapon
-	var type := weapon.damage_type if weapon.damage_type != null else damage_type(&"")
+	var type := shot.damage_type if shot.damage_type != null else damage_type(&"")
 
 	var shooter := hitboxes_of(shot.attacker)
 	trace.exclude = [shooter] if shooter != null else []
 
 	shot.impacts.clear()
 
-	if weapon.delivery == DotWeapon.Delivery.PROJECTILE:
-		# A projectile is an entity with a lifetime; it is not resolved here. The
-		# endpoint is recorded so a caller can spawn it along the right vector, and
+	if shot.deferred:
+		# A deferred shot is an entity with a lifetime; it is not resolved here. The
+		# endpoint is recorded so a caller can launch it along the right vector, and
 		# the shot produces no damage of its own.
 		for direction in shot.pellets:
-			shot.impacts.append(shot.origin + direction * weapon.max_range)
+			shot.impacts.append(shot.origin + direction * shot.max_range)
 		return
 
 	for pellet in range(shot.pellets.size()):
 		var direction: Vector3 = shot.pellets[pellet]
-		var hit := trace.ray(shot.origin, direction, weapon.max_range, _set_list)
+		var hit := trace.ray(shot.origin, direction, shot.max_range, _set_list)
 
 		if not hit.ok():
-			shot.impacts.append(shot.origin + direction * weapon.max_range)
+			shot.impacts.append(shot.origin + direction * shot.max_range)
 			continue
 
 		shot.impacts.append(hit.point)
@@ -473,14 +483,14 @@ func _trace_shot(shot: DotShot) -> void:
 		var damage := DotDamage.make(
 			shot.attacker,
 			victim,
-			weapon.damage * config.damage_scale,
+			shot.damage * config.damage_scale,
 			type
 		)
 		damage.hit_group = hit.group
 		damage.point = hit.point
 		damage.direction = direction
 		damage.distance = hit.distance
-		damage.weapon_id = weapon.id
+		damage.weapon_id = shot.weapon_id
 		damage.tick = shot.tick
 
 		if hit.hitbox != null:
@@ -490,11 +500,10 @@ func _trace_shot(shot: DotShot) -> void:
 
 
 func _apply_splash(shot: DotShot) -> void:
-	var weapon := shot.weapon
-	var type := weapon.splash_type
+	var type := shot.splash_type
 
 	if type == null:
-		type = weapon.damage_type if weapon.damage_type != null else damage_type(&"")
+		type = shot.damage_type if shot.damage_type != null else damage_type(&"")
 
 	# Splash originates where the shot actually landed, not at the muzzle. With no
 	# impacts — a projectile, which has not landed yet — there is nothing to splash.
@@ -504,11 +513,11 @@ func _apply_splash(shot: DotShot) -> void:
 	var centre: Vector3 = shot.impacts[0]
 	var shooter := hitboxes_of(shot.attacker)
 
-	trace.exclude = [] if weapon.splash_hurts_owner else (
+	trace.exclude = [] if shot.splash_hurts_owner else (
 		[shooter] if shooter != null else []
 	)
 
-	var caught := trace.sphere_overlap(centre, weapon.splash_radius, _set_list, true)
+	var caught := trace.sphere_overlap(centre, shot.splash_radius, _set_list, true)
 
 	for set_node in caught:
 		var victim := _entity_id_of(set_node.entity_owner())
@@ -518,7 +527,7 @@ func _apply_splash(shot: DotShot) -> void:
 
 		var closest := set_node.closest_point(centre)
 		var distance := centre.distance_to(closest)
-		var amount := weapon.splash_at(distance) * config.damage_scale
+		var amount := shot.splash_at(distance) * config.damage_scale
 
 		if amount <= 0.0:
 			continue
@@ -530,7 +539,7 @@ func _apply_splash(shot: DotShot) -> void:
 		# type's falloff as well would apply two curves to one number.
 		damage.distance = 0.0
 		damage.hit_group = DotHitGroup.GENERIC
-		damage.weapon_id = weapon.id
+		damage.weapon_id = shot.weapon_id
 		damage.tick = shot.tick
 
 		shot.damages.append(resolver.resolve(damage))

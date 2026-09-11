@@ -1,23 +1,36 @@
 # dot-combat
 
-Health, damage and weapons. Read `../../CLAUDE.md` first for the family-wide rules;
-this file is only what is specific to combat.
+Health, damage and hit registration. Read `../../CLAUDE.md` first for the family-wide
+rules; this file is only what is specific to combat.
+
+**Weapons are dot-weapon's, not this addon's.** `weapons/` is gone: `DotWeapon`,
+`DotArsenal`, `DotWeaponState`, `DotRecoil` and `DotCombatCommand` moved out and became
+a catalogue of documents naming behaviour scripts by path. `DotSpread` stayed, in
+`core/`, because scatter is a property of a shot rather than of a weapon, and putting
+the same integer hash in two addons is the duplication this family guards hardest
+against.
 
 ## The one idea
 
 **Deciding that a shot happened and deciding what it hit are two different jobs, and
 they run in different places.**
 
-`DotArsenal` does the first. It is a pure function of the `DotCombatCommand` it is
-given and of its own state: no device, no clock, no node lookups, no damage. It runs
-on the owning client *and* on the server, and both reach the same `DotShot`.
+Whatever produces the shot does the first, and it is dot-weapon in every game here. It
+runs on the owning client *and* on the server, and both reach the same `DotShot`.
+
+**A `DotShot` describes itself.** It used to hold a `DotWeapon` and the manager read
+`weapon.damage`, `weapon.max_range` and `weapon.delivery` off it, which quietly made
+"what can be resolved" the same question as "what that one resource can describe": a
+bow, a thrown charge and a game's own weapon had no way to produce one without
+pretending to be a gun. Six numbers on the shot cost a few bytes and buy a combat layer
+that resolves anything, including a trap, a turret or a falling rock.
 
 `DotCombatManager` does the second. It traces, it rewinds, it applies damage, and it
 runs only where `is_authority` is true. A client instance still traces — for hit
 markers and impact effects — but never touches a `DotHealth`.
 
-Collapsing the two is the obvious simplification and it is wrong in a specific way: an
-arsenal that applied its own damage would be a client that decides who dies.
+Collapsing the two is the obvious simplification and it is wrong in a specific way: a
+weapon that applied its own damage would be a client that decides who dies.
 
 ## Spread cannot come from a random number generator
 
@@ -68,7 +81,7 @@ entity hitboxes are ours.**
 
 A headless server, a self-test and a deterministic replay all need to trace against a
 world and none of them has a populated physics space. `DotTraceFlat` is analytic boxes
-and a ground plane, the same role `DotFpsFlatBody` plays in dot-fps-controller. Every
+and a ground plane, the same role `DotFpsFlatBody` plays in dot-player-controller. Every
 check in this project's self-test runs against one, and a deathmatch level made of
 boxes is a deathmatch level.
 
@@ -97,13 +110,7 @@ that is mostly refusals.
 
 ## Integers on the wire, and integers in the state
 
-`DotWeaponState.bloom` is an integer in hundredths of a degree rather than a float in
-degrees. Bloom survives across ticks and is replayed on every reconciliation, and a
-float that decays by a per-tick fraction drifts apart between the client's replay and
-the server's original run. Hundredths of a degree is finer than any weapon is tuned to
-and it replays exactly.
-
-`DotCombatNetSync` replicates health and armour as integers for the related reason: an
+`DotCombatNetSync` replicates health and armour as integers: an
 integer compares exactly, so a reconciling client does not see a correction on every
 single tick because the server's `73.4001` differs from its own `73.4`.
 
@@ -130,17 +137,20 @@ The self-test covers it because it is invisible until someone plays a deathmatch
 
 ## Coupling: nothing is imported
 
-dot-combat names no class outside dot-core. Not dot-net, not dot-fps-controller, not
+dot-combat names no class outside dot-core. Not dot-net, not dot-player-controller, not
 dot-server.
 
-- `DotCombatCommand.write` / `read` take `Variant`, so this project parses without
-  dot-net installed. A script that *mentions* a missing `class_name` fails to parse
-  and takes every script that references it down with it.
+- Nothing here names a dot-net type. A script that *mentions* a missing `class_name`
+  fails to parse and takes every script that references it down with it, which is why
+  `DotWeaponCommand.write` / `read` in dot-weapon take `Variant`.
 - `DotCombatNetSync` describes what to replicate as data — property names and *type
   names as strings* — which a bridge resolves with `DotNetVar.Type[spec.type]`.
 - Lag compensation is two `Callable`s.
-- Movement state (`movement`, `airborne`, `crouched`) is *pushed into* `DotArsenal` by
-  the host rather than read out of a controller.
+- Movement state is *pushed into* a `DotWeaponContext` by the host rather than read out
+  of a controller. An interpolated position differs between client and server by
+  design, and feeding it to the spread makes the spread differ too.
+- `DotCombatNetSync` carries health alone. The slot, the magazine and the reserve are
+  `DotWeaponNetSync`'s; a game using both concatenates the two spec lists.
 
 The ~30-line `DotNetBehaviour` that joins dot-combat to dot-net belongs in the game.
 The worked example is in `DotCombatNetSync`'s class documentation.
@@ -172,18 +182,14 @@ hitbox and must report a hit at distance zero rather than a miss.
   that is dot-net's job to carry and a game's to model. Compensating a projectile is
   also a genuinely different problem from compensating a hitscan shot: you cannot
   rewind for a thing that will arrive in 400 ms.
-- **Recoil applied to the view.** `DotWeapon.recoil_pitch` / `recoil_yaw` /
-  `recoil_recovery` are declared and nothing reads them. Recoil has to move the
-  *camera*, which is dot-fps-controller's `DotFpsView`, and wiring it here would make
-  dot-combat depend on it. A game reads `consecutive_shots` and applies its own.
-- **Melee.** A weapon with `max_range` of 2 and one pellet is a knife, and it works.
-  A swing arc with a wind-up, a hit window and a lunge is not modelled.
+- **Anything about what a player is holding.** Rate of fire, magazines, reloading,
+  switching, recoil and melee arcs are all dot-weapon's, and a `DotShot` is the seam.
 - **Ballistics.** No drag, no wind, no penetration through materials, no ricochet.
   `DotDamageType` has the falloff a shooter needs and nothing a simulation would want.
 - **Hit markers, tracers, decals, sounds.** `DotShot.impacts` and the signals carry
   everything a presentation layer needs. dot-combat ships no art and no audio.
-- **Ammunition as pickups.** `DotArsenal.add_ammo` is the API; the world entity that
-  calls it belongs in dot-loadout.
+- **Ammunition as pickups.** `DotWeaponArsenal.add_ammo` is the API in dot-weapon; the
+  world entity that calls it belongs in dot-loadout.
 - **Damage over time.** No burning, no bleeding, no poison. `apply_damage` per tick
   from a game's own timer is the whole implementation and there is no shared piece
   worth extracting yet.

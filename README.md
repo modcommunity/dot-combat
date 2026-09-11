@@ -11,10 +11,12 @@ This asset, along with all the others, was built initially with **Claude Code** 
 
 I intend on reviewing code, testing, and editing documentation regularly. If you're interested in helping out, please let me know!
 
-## Health, Damage and Weapons
-Health, damage and weapons for a Godot 4 shooter. Analytic hitboxes, deterministic spread, lag-compensated hit registration, and an arsenal that simulates from commands so a client can predict its own fire and a server can re-run it authoritatively.
+## Health, Damage and Hit Registration
+Health, damage and hit registration for a Godot 4 shooter. Analytic hitboxes, deterministic spread, lag compensation, and a resolver that turns a shot into damage under one set of rules, once.
 
-Part of the [dot-*](https://github.com/modcommunity) family. Needs **dot-core**. Works with **dot-net** and **dot-fps-controller** without importing either.
+**Weapons moved out.** What a player holds and uses is now [dot-weapon](https://github.com/modcommunity/dot-weapon), and this addon no longer knows what a weapon is. A `DotShot` describes itself, so a bow, a thrown charge, a trap, a turret or an environmental hazard produces one the same way a rifle does.
+
+Part of the [dot-*](https://github.com/modcommunity) family. Needs **dot-core**. Works with **dot-net**, **dot-weapon** and **dot-player-controller** without importing any of them.
 
 ## Install
 
@@ -33,19 +35,23 @@ add_child(combat)
 hitbox_set.register_with(combat, player_id)
 combat.register_health(player_id, health)
 
-# Per simulated tick, on client and server alike.
-arsenal.movement = velocity.length() / max_speed
-arsenal.airborne = not grounded
-for shot in arsenal.simulate_tick(tick, delta, command):
-    if is_server:
-        combat.resolve_shot(shot, client_view_tick)
+# Per shot. Anything can build one; dot-weapon is what usually does.
+var shot := DotShot.make(&"rifle", player_id, tick, index)
+shot.origin = eye_position
+shot.direction = aim
+shot.damage = 25.0
+shot.max_range = 200.0
+shot.scatter()
+
+if is_server:
+    combat.resolve_shot(shot, client_view_tick)
 ```
 
 ## The idea
 
-A weapon decides that a shot *happened*. Something else decides what it *hit*.
+Something decides that a shot *happened*. This decides what it *hit*.
 
-`DotArsenal.simulate_tick()` is a pure function of the command it is given and its own state — no device, no clock, no other node, no damage. It produces `DotShot`s. The owning client runs it optimistically and the server runs it authoritatively, and both reach the same shot from the same command, because the spread is a hash of the shot rather than a draw from a random stream.
+Whatever produced the shot runs on the owning client and on the server alike, and both reach the same shot from the same inputs, because the spread is a hash of the shot rather than a draw from a random stream. dot-weapon is the usual producer, and it is not required: a `DotShot` carries its own damage, range and splash, so nothing about resolving one depends on a weapon existing.
 
 `DotCombatManager.resolve_shot()` traces those shots and applies the damage, and runs only where the game is authoritative. A client that resolved its own shots would be a client that decides who dies.
 
@@ -59,11 +65,9 @@ A weapon decides that a shot *happened*. Something else decides what it *hit*.
 | `DotHitGroup` | Named regions and their multipliers. A table, not an enum. |
 | `DotHitbox` / `DotHitboxSet` | Capsules, boxes and spheres tested analytically against a ray. |
 | `DotTrace` | Where a shot goes. `DotTracePhysics` for a real world, `DotTraceFlat` for a headless one. |
-| `DotWeapon` | The definition: rate, spread, recoil, magazine, reload, splash. Seconds in, ticks out. |
-| `DotWeaponState` | One carrier's runtime state for one weapon. Integers throughout. |
-| `DotArsenal` | What is held, and what the trigger does. The predicted part. |
+| `DotShot` | One thing that was fired, describing its own damage, range and splash. |
 | `DotSpread` | Deterministic scatter. The reason prediction works. |
-| `DotDamageRules` / `DotDamageResolver` | Friendly fire, self damage, hit groups, falloff, clamping — in one order, once. |
+| `DotDamageRules` / `DotDamageResolver` | Friendly fire, self damage, hit groups, falloff and clamping, in one order, once. |
 | `DotCombatManager` | Tracing, lag compensation, damage application, kill reporting. |
 | `DotCombatNetSync` | What to replicate, without naming a dot-net type. |
 

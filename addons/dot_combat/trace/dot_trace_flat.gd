@@ -9,7 +9,7 @@ extends DotTrace
 ## depends on what ran before it, and a replay that re-derives a different answer than
 ## the original is a reconciliation loop that never converges.
 ##
-## The same reason dot-fps-controller ships [code]DotFpsFlatBody[/code]. This is not a
+## The same reason dot-player-controller ships [code]DotFpsFlatBody[/code]. This is not a
 ## toy: a deathmatch level made of boxes is a deathmatch level, and every self-test in
 ## this project runs against one.
 

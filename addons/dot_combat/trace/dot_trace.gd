@@ -4,7 +4,7 @@ extends RefCounted
 ## Where a shot goes. The single place a weapon asks "what did I hit".
 ##
 ## [b]Why this is an abstraction and not just a physics query.[/b] The same reason
-## dot-fps-controller has [code]DotFpsBody[/code]: a headless server, a self-test and
+## dot-player-controller has [code]DotFpsBody[/code]: a headless server, a self-test and
 ## a deterministic replay all need to trace against a world, and only one of those
 ## three has a populated physics space. Subclass it and a game can trace against
 ## anything — a heightmap, a voxel grid, a set of analytic boxes — without weapons

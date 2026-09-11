@@ -30,11 +30,6 @@ const _TYPES := [
 		"Node3D",
 		"res://addons/dot_combat/core/dot_hitbox_set.gd",
 	],
-	[
-		"DotArsenal",
-		"Node",
-		"res://addons/dot_combat/weapons/dot_arsenal.gd",
-	],
 ]
 
 

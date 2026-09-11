@@ -22,15 +22,6 @@ var _failures := PackedStringArray()
 var _players: Array[Node3D] = []
 
 
-## An arsenal whose shots are attributed to a chosen id rather than to its parent's
-## instance id, which is what a real game does — a server keys damage on a session id.
-class TestArsenal extends DotArsenal:
-	var entity: int = 0
-
-	func attacker_id() -> int:
-		return entity
-
-
 func _ready() -> void:
 	DotLog.set_level(DotLog.Level.ERROR)
 	_run.call_deferred()
@@ -41,16 +32,12 @@ func _run() -> void:
 	print("")
 
 	_test_damage_type()
-	_test_recoil()
 	_test_hit_groups()
 	_test_health()
 	_test_spread_determinism()
 	_test_hitbox_geometry()
 	_test_hitbox_precedence()
 	_test_flat_trace()
-	_test_arsenal_firing()
-	_test_arsenal_reloading()
-	_test_arsenal_switching()
 	_test_resolver_rules()
 	_test_manager_hitscan()
 	_test_manager_walls()
@@ -102,20 +89,32 @@ func _bullet() -> DotDamageType:
 	return type
 
 
-func _rifle() -> DotWeapon:
-	var weapon := DotWeapon.make(&"rifle", 25.0)
-	weapon.fire_mode = DotWeapon.Fire.AUTO
-	weapon.rpm = 600.0
-	weapon.magazine = 30
-	weapon.reserve = 90
-	weapon.reload_sec = 2.0
-	weapon.deploy_sec = 0.0
-	weapon.holster_sec = 0.0
-	weapon.spread_degrees = 0.0
-	weapon.spread_bloom = 0.0
-	weapon.damage_type = _bullet()
-	weapon.max_range = 200.0
-	return weapon
+## A rifle shot, ready to resolve.
+##
+## A [DotShot] rather than a weapon: dot-combat no longer knows what a weapon is, and
+## a shot now carries the six numbers the resolver actually needs. dot-weapon's suite
+## covers the half that decides a shot happened.
+func _rifle_shot(attacker: int, tick: int, index: int) -> DotShot:
+	var shot := DotShot.make(&"rifle", attacker, tick, index)
+	shot.damage = 25.0
+	shot.damage_type = _bullet()
+	shot.max_range = 200.0
+	shot.spread = 0.0
+	shot.pellet_count = 1
+	return shot
+
+
+## A rocket shot: no direct damage, a five-metre splash that hurts its own shooter.
+func _rocket_shot(type: DotDamageType, attacker: int, tick: int, index: int) -> DotShot:
+	var shot := DotShot.make(&"rocket", attacker, tick, index)
+	shot.damage = 0.0
+	shot.damage_type = type
+	shot.splash_type = type
+	shot.splash_radius = 5.0
+	shot.splash_damage = 100.0
+	shot.splash_hurts_owner = true
+	shot.max_range = 100.0
+	return shot
 
 
 ## A player: a body node with a [DotHealth] and a [DotHitboxSet] of three hitboxes.
@@ -586,269 +585,6 @@ func _test_flat_trace() -> void:
 
 # --- Arsenal ---------------------------------------------------------------
 
-func _test_arsenal_firing() -> void:
-	_group("arsenal: firing")
-
-	var arsenal := DotArsenal.new()
-	arsenal.tick_rate = 60
-	add_child(arsenal)
-
-	var rifle := _rifle()
-	arsenal.give(rifle, 1)
-	arsenal.select(1, 0)
-
-	var command := DotCombatCommand.new()
-	command.set_button(DotCombatCommand.BUTTON_ATTACK, true)
-
-	var shots := arsenal.simulate_tick(0, 1.0 / 60.0, command)
-	_check(shots.size() == 1, "an automatic weapon fires on the first tick")
-	_check(arsenal.current().ammo == 29, "and spends a round")
-
-	# 600 rpm at 60 Hz is a shot every 6 ticks. Firing on tick 1 would be a weapon
-	# with no rate of fire at all.
-	var immediate := arsenal.simulate_tick(1, 1.0 / 60.0, command)
-	_check(immediate.is_empty(), "and not again before its interval")
-
-	var later := arsenal.simulate_tick(6, 1.0 / 60.0, command)
-	_check(later.size() == 1, "then again on schedule")
-
-	# Semi-automatic must be edge-triggered. Reading the level makes it automatic for
-	# anyone holding the button.
-	var pistol := DotWeapon.make(&"pistol", 30.0)
-	pistol.fire_mode = DotWeapon.Fire.SEMI
-	pistol.rpm = 600.0
-	pistol.magazine = 12
-	pistol.deploy_sec = 0.0
-	pistol.holster_sec = 0.0
-	arsenal.give(pistol, 2)
-	arsenal.select(2, 10)
-
-	# The trigger is released first. It has been held since the automatic weapon
-	# above, and a semi-automatic that fired on a trigger already down would be an
-	# automatic one — which is the behaviour being tested, from the other side.
-	var idle := DotCombatCommand.new()
-	arsenal.simulate_tick(10, 1.0 / 60.0, idle)
-
-	var held := arsenal.simulate_tick(11, 1.0 / 60.0, command)
-	_check(held.size() == 1, "a semi-automatic fires once on the press")
-	var still_held := arsenal.simulate_tick(30, 1.0 / 60.0, command)
-	_check(still_held.is_empty(), "and not again while the trigger is held")
-
-	arsenal.simulate_tick(31, 1.0 / 60.0, idle)
-	var repressed := arsenal.simulate_tick(32, 1.0 / 60.0, command)
-	_check(repressed.size() == 1, "but does on the next press")
-
-	# A burst fires its count and then stops, even while held.
-	var burst := DotWeapon.make(&"burst", 20.0)
-	burst.fire_mode = DotWeapon.Fire.BURST
-	burst.burst_count = 3
-	burst.burst_rpm = 1200.0
-	burst.rpm = 300.0
-	burst.magazine = 30
-	burst.deploy_sec = 0.0
-	burst.holster_sec = 0.0
-	arsenal.give(burst, 3)
-	arsenal.select(3, 100)
-	arsenal.simulate_tick(100, 1.0 / 60.0, idle)
-
-	var fired := 0
-	for tick in range(101, 141):
-		fired += arsenal.simulate_tick(tick, 1.0 / 60.0, command).size()
-	_check(fired == 3, "a burst fires exactly its count while held", "fired %d" % fired)
-
-	# Pellets: one round, several projectiles.
-	var shotgun := DotWeapon.make(&"shotgun", 10.0)
-	shotgun.pellets = 8
-	shotgun.fire_mode = DotWeapon.Fire.SEMI
-	shotgun.spread_degrees = 5.0
-	shotgun.magazine = 6
-	shotgun.deploy_sec = 0.0
-	shotgun.holster_sec = 0.0
-	arsenal.give(shotgun, 4)
-	arsenal.select(4, 200)
-	arsenal.simulate_tick(200, 1.0 / 60.0, idle)
-	var blast := arsenal.simulate_tick(201, 1.0 / 60.0, command)
-	_check(blast.size() == 1, "a shotgun fires one shot")
-	_check(blast[0].pellets.size() == 8, "made of eight pellets")
-	_check(arsenal.state_at(4).ammo == 5, "costing one round")
-
-	arsenal.queue_free()
-	remove_child(arsenal)
-
-
-func _test_arsenal_reloading() -> void:
-	_group("arsenal: reloading")
-
-	var arsenal := DotArsenal.new()
-	arsenal.tick_rate = 60
-	add_child(arsenal)
-
-	var rifle := _rifle()
-	rifle.auto_reload = false
-	arsenal.give(rifle, 1)
-	arsenal.select(1, 0)
-
-	var state := arsenal.current()
-	state.ammo = 10
-
-	var reload := DotCombatCommand.new()
-	reload.set_button(DotCombatCommand.BUTTON_RELOAD, true)
-
-	arsenal.simulate_tick(0, 1.0 / 60.0, reload)
-	_check(state.is_reloading(1), "the reload starts")
-
-	var idle := DotCombatCommand.new()
-	for tick in range(1, 119):
-		arsenal.simulate_tick(tick, 1.0 / 60.0, idle)
-	_check(state.ammo == 10, "and takes its full duration")
-
-	arsenal.simulate_tick(120, 1.0 / 60.0, idle)
-	_check(state.ammo == 30, "then fills the magazine")
-	_check(state.reserve == 70, "from the reserve")
-
-	# Firing during a reload must be refused, or the reload duration means nothing.
-	var attack := DotCombatCommand.new()
-	attack.set_button(DotCombatCommand.BUTTON_ATTACK, true)
-	state.ammo = 5
-	arsenal.simulate_tick(200, 1.0 / 60.0, reload)
-	var during := arsenal.simulate_tick(210, 1.0 / 60.0, attack)
-	_check(during.is_empty(), "firing during a reload is refused")
-
-	# A per-round reload is interruptible by firing, which is the whole point.
-	var pump := DotWeapon.make(&"pump", 60.0)
-	pump.fire_mode = DotWeapon.Fire.SEMI
-	pump.magazine = 6
-	pump.reserve = 24
-	pump.reload_per_round = true
-	pump.reload_sec = 0.4
-	pump.reload_start_sec = 0.0
-	pump.rpm = 90.0
-	pump.deploy_sec = 0.0
-	pump.holster_sec = 0.0
-	pump.auto_reload = false
-	arsenal.give(pump, 2)
-	arsenal.select(2, 300)
-
-	var pump_state := arsenal.state_at(2)
-	pump_state.ammo = 0
-
-	arsenal.simulate_tick(300, 1.0 / 60.0, reload)
-	for tick in range(301, 350):
-		arsenal.simulate_tick(tick, 1.0 / 60.0, idle)
-	_check(pump_state.ammo >= 2, "a per-round reload loads shells one at a time",
-		"ammo %d" % pump_state.ammo)
-	_check(pump_state.ammo < 6, "and is not finished yet", "ammo %d" % pump_state.ammo)
-
-	var loaded := pump_state.ammo
-	arsenal.simulate_tick(350, 1.0 / 60.0, attack)
-	_check(
-		pump_state.ammo == loaded - 1,
-		"firing interrupts it and spends what was loaded"
-	)
-	_check(not pump_state.is_reloading(351), "leaving the reload cancelled")
-
-	# Auto-reload on an empty magazine.
-	var auto := _rifle()
-	auto.auto_reload = true
-	arsenal.give(auto, 3)
-	arsenal.select(3, 400)
-	var auto_state := arsenal.state_at(3)
-	auto_state.ammo = 1
-	arsenal.simulate_tick(400, 1.0 / 60.0, attack)
-	_check(auto_state.ammo == 0, "the last round is fired")
-	arsenal.simulate_tick(401, 1.0 / 60.0, idle)
-	_check(auto_state.is_reloading(402), "and an empty magazine reloads itself")
-
-	arsenal.queue_free()
-	remove_child(arsenal)
-
-
-func _test_arsenal_switching() -> void:
-	_group("arsenal: switching")
-
-	var arsenal := DotArsenal.new()
-	arsenal.tick_rate = 60
-	add_child(arsenal)
-
-	var first := _rifle()
-	first.holster_sec = 0.2
-	first.deploy_sec = 0.2
-
-	var second := DotWeapon.make(&"smg", 15.0)
-	second.magazine = 25
-	second.holster_sec = 0.2
-	second.deploy_sec = 0.2
-	second.rpm = 900.0
-	second.damage_type = _bullet()
-
-	arsenal.give(first, 1)
-	arsenal.give(second, 2)
-	arsenal.select(1, 0)
-	_check(arsenal.current_slot() == 1, "the first weapon is held")
-
-	var pick := DotCombatCommand.new()
-	pick.slot = 2
-	arsenal.simulate_tick(100, 1.0 / 60.0, pick)
-	_check(arsenal.current_slot() == 1, "a switch does not complete instantly")
-	_check(arsenal.is_switching(), "it holsters first")
-
-	var idle := DotCombatCommand.new()
-	for tick in range(101, 125):
-		arsenal.simulate_tick(tick, 1.0 / 60.0, idle)
-	_check(arsenal.current_slot() == 2, "then completes")
-
-	# Deploy: the new weapon cannot fire immediately.
-	var attack := DotCombatCommand.new()
-	attack.set_button(DotCombatCommand.BUTTON_ATTACK, true)
-	var early := arsenal.simulate_tick(115, 1.0 / 60.0, attack)
-	_check(early.is_empty(), "and cannot fire while deploying")
-
-	for tick in range(126, 160):
-		arsenal.simulate_tick(tick, 1.0 / 60.0, idle)
-	var ready := arsenal.simulate_tick(160, 1.0 / 60.0, attack)
-	_check(ready.size() == 1, "then fires normally")
-
-	# Last-weapon swap.
-	var last := DotCombatCommand.new()
-	last.set_button(DotCombatCommand.BUTTON_LAST, true)
-	arsenal.simulate_tick(200, 1.0 / 60.0, last)
-	for tick in range(201, 240):
-		arsenal.simulate_tick(tick, 1.0 / 60.0, idle)
-	_check(arsenal.current_slot() == 1, "the last-weapon button goes back")
-
-	# Cycling.
-	var next := DotCombatCommand.new()
-	next.set_button(DotCombatCommand.BUTTON_NEXT, true)
-	arsenal.simulate_tick(300, 1.0 / 60.0, next)
-	for tick in range(301, 340):
-		arsenal.simulate_tick(tick, 1.0 / 60.0, idle)
-	_check(arsenal.current_slot() == 2, "next cycles forward")
-
-	# Shared ammunition pools: two weapons, one reserve.
-	var pooled_a := DotWeapon.make(&"pooled_a", 10.0)
-	pooled_a.ammo_type = &"shared"
-	pooled_a.reserve = 10
-	pooled_a.reserve_max = 60
-	var pooled_b := DotWeapon.make(&"pooled_b", 10.0)
-	pooled_b.ammo_type = &"shared"
-	pooled_b.reserve = 10
-	pooled_b.reserve_max = 60
-
-	arsenal.give(pooled_a, 5)
-	arsenal.give(pooled_b, 6)
-	var taken := arsenal.add_ammo(&"shared", 30)
-	_check(taken == 30, "ammunition is spread across a shared pool", "took %d" % taken)
-
-	var overflow := arsenal.add_ammo(&"shared", 10000)
-	_check(overflow < 10000, "and a pickup nobody can hold is not silently eaten",
-		"took %d" % overflow)
-
-	arsenal.queue_free()
-	remove_child(arsenal)
-
-
-# --- Rules -----------------------------------------------------------------
-
 func _test_resolver_rules() -> void:
 	_group("damage rules")
 
@@ -963,9 +699,7 @@ func _test_manager_hitscan() -> void:
 	var kills: Array[int] = []
 	manager.entity_killed.connect(func(id: int, _d: DotDamage) -> void: kills.append(id))
 
-	var weapon := _rifle()
-
-	var shot := DotShot.make(weapon, 1, 100, 1)
+	var shot := _rifle_shot(1, 100, 1)
 	shot.origin = Vector3(0.0, 1.0, 0.0)
 	shot.direction = Vector3.FORWARD
 	shot.tick = 100
@@ -983,7 +717,7 @@ func _test_manager_hitscan() -> void:
 	_check(shot.impacts.size() == 1, "the impact point is recorded for effects")
 
 	# A headshot goes through the group multiplier.
-	var head_shot := DotShot.make(weapon, 1, 101, 2)
+	var head_shot := _rifle_shot(1, 101, 2)
 	head_shot.origin = Vector3(0.0, 1.62, 0.0)
 	head_shot.direction = Vector3.FORWARD
 	head_shot.tick = 101
@@ -995,7 +729,7 @@ func _test_manager_hitscan() -> void:
 	_check(not _health_of(victim).alive, "the victim is dead")
 
 	# A shot at nothing must still report an endpoint, or there is no tracer.
-	var miss := DotShot.make(weapon, 1, 102, 3)
+	var miss := _rifle_shot(1, 102, 3)
 	miss.origin = Vector3(0.0, 1.0, 0.0)
 	miss.direction = Vector3.RIGHT
 	miss.tick = 102
@@ -1009,7 +743,7 @@ func _test_manager_hitscan() -> void:
 	_hitboxes_of(shooter).register_with(manager, 1)
 	manager.register_health(1, _health_of(shooter))
 
-	var point_blank := DotShot.make(weapon, 1, 103, 4)
+	var point_blank := _rifle_shot(1, 103, 4)
 	point_blank.origin = Vector3(0.0, 1.6, 0.0)
 	point_blank.direction = Vector3.DOWN
 	point_blank.tick = 103
@@ -1038,7 +772,7 @@ func _test_manager_walls() -> void:
 	_hitboxes_of(victim).register_with(manager, 2)
 	manager.register_health(2, _health_of(victim))
 
-	var shot := DotShot.make(_rifle(), 1, 100, 1)
+	var shot := _rifle_shot(1, 100, 1)
 	shot.origin = Vector3(0.0, 1.0, 0.0)
 	shot.direction = Vector3.FORWARD
 	shot.tick = 100
@@ -1056,7 +790,7 @@ func _test_manager_walls() -> void:
 	_hitboxes_of(behind).register_with(manager, 3)
 	manager.register_health(3, _health_of(behind))
 
-	var second := DotShot.make(_rifle(), 1, 101, 2)
+	var second := _rifle_shot(1, 101, 2)
 	second.origin = Vector3(0.0, 1.0, 0.0)
 	second.direction = Vector3.FORWARD
 	second.tick = 101
@@ -1112,7 +846,7 @@ func _test_cover_tie() -> void:
 	_close(probe.distance, 9.0, "the wall face and the hitbox surface coincide", 0.0001)
 	_check(probe.blocked, "and the tie goes to the wall, not to the player")
 
-	var shot := DotShot.make(_rifle(), 1, 100, 1)
+	var shot := _rifle_shot(1, 100, 1)
 	shot.origin = Vector3.ZERO
 	shot.direction = Vector3.FORWARD
 	shot.tick = 100
@@ -1141,22 +875,12 @@ func _test_manager_splash() -> void:
 	_hitboxes_of(far).register_with(manager, 3)
 	manager.register_health(3, _health_of(far))
 
-	var rocket := DotWeapon.make(&"rocket", 0.0)
-	rocket.fire_mode = DotWeapon.Fire.SEMI
-	rocket.splash_radius = 5.0
-	rocket.splash_damage = 100.0
-	rocket.splash_hurts_owner = true
-	rocket.magazine = 4
-	rocket.max_range = 100.0
-
 	var splash_type := DotDamageType.make(&"blast")
 	splash_type.uses_hit_groups = false
 	splash_type.armour_share = 0.0
 	splash_type.self_scale = 0.5
-	rocket.damage_type = splash_type
-	rocket.splash_type = splash_type
 
-	var shot := DotShot.make(rocket, 1, 100, 1)
+	var shot := _rocket_shot(splash_type, 1, 100, 1)
 	shot.origin = Vector3(0.0, 1.0, 0.0)
 	shot.direction = Vector3(0.0, -0.0995, -0.995).normalized()
 	shot.tick = 100
@@ -1183,7 +907,7 @@ func _test_manager_splash() -> void:
 	_hitboxes_of(sheltered).register_with(manager2, 4)
 	manager2.register_health(4, _health_of(sheltered))
 
-	var blast := DotShot.make(rocket, 1, 101, 2)
+	var blast := _rocket_shot(splash_type, 1, 101, 2)
 	blast.origin = Vector3(0.0, 1.0, 0.0)
 	blast.direction = Vector3(0.0, -0.0995, -0.995).normalized()
 	blast.tick = 101
@@ -1222,7 +946,7 @@ func _test_manager_validation() -> void:
 
 	# A client claiming a muzzle on the far side of the level is claiming a shot
 	# through every wall between here and there.
-	var teleported := DotShot.make(_rifle(), 1, 100, 1)
+	var teleported := _rifle_shot(1, 100, 1)
 	teleported.origin = Vector3(0.0, 1.0, -9.0)
 	teleported.direction = Vector3.FORWARD
 	teleported.tick = 100
@@ -1241,7 +965,7 @@ func _test_manager_validation() -> void:
 	)
 
 	for i in range(40):
-		var spam := DotShot.make(_rifle(), 1, 200 + i, i)
+		var spam := _rifle_shot(1, 200 + i, i)
 		spam.origin = Vector3(0.0, 1.0, 0.0)
 		spam.direction = Vector3.FORWARD
 		spam.tick = 200 + i
@@ -1253,7 +977,7 @@ func _test_manager_validation() -> void:
 
 	# A dead player cannot shoot.
 	_health_of(shooter).alive = false
-	var posthumous := DotShot.make(_rifle(), 1, 400, 1)
+	var posthumous := _rifle_shot(1, 400, 1)
 	posthumous.origin = Vector3(0.0, 1.0, 0.0)
 	posthumous.direction = Vector3.FORWARD
 	posthumous.tick = 400
@@ -1268,7 +992,7 @@ func _test_manager_validation() -> void:
 	_hitboxes_of(target).register_with(client, 5)
 	client.register_health(5, _health_of(target))
 
-	var predicted := DotShot.make(_rifle(), 6, 500, 1)
+	var predicted := _rifle_shot(6, 500, 1)
 	predicted.origin = Vector3(0.0, 1.0, 0.0)
 	predicted.direction = Vector3.FORWARD
 	predicted.tick = 500
@@ -1316,7 +1040,7 @@ func _test_lag_compensation() -> void:
 	# The victim has since moved out of the line of fire; the shooter saw them in it.
 	victim.position = Vector3(3.0, 0.0, -10.0)
 
-	var shot := DotShot.make(_rifle(), 1, 100, 1)
+	var shot := _rifle_shot(1, 100, 1)
 	shot.origin = Vector3(0.0, 1.0, 0.0)
 	shot.direction = Vector3.FORWARD
 	shot.tick = 100
@@ -1332,7 +1056,7 @@ func _test_lag_compensation() -> void:
 	# window must be clamped, not obeyed.
 	rewinds.clear()
 	restores.clear()
-	var ancient := DotShot.make(_rifle(), 1, 1000, 2)
+	var ancient := _rifle_shot(1, 1000, 2)
 	ancient.origin = Vector3(0.0, 1.0, 0.0)
 	ancient.direction = Vector3.FORWARD
 	ancient.tick = 1000
@@ -1350,7 +1074,7 @@ func _test_lag_compensation() -> void:
 	restores.clear()
 	manager.config.shots_per_second = 1.0
 	for i in range(6):
-		var spam := DotShot.make(_rifle(), 1, 2000 + i, i)
+		var spam := _rifle_shot(1, 2000 + i, i)
 		spam.origin = Vector3(0.0, 1.0, 0.0)
 		spam.direction = Vector3.FORWARD
 		spam.tick = 2000 + i
@@ -1376,22 +1100,23 @@ class FakeBehaviour extends Object:
 	var net_health: int = 0
 	var net_armour: int = 0
 	var net_alive: bool = false
-	var net_slot: int = 0
-	var net_ammo: int = 0
-	var net_reserve: int = 0
 
 
 func _test_net_sync() -> void:
 	_group("net sync")
 
 	var specs := DotCombatNetSync.specs()
-	_check(specs.size() == 6, "the bridge describes every replicated property")
+	# Three, not six: the slot, the magazine and the reserve moved to dot-weapon's own
+	# sync when the weapon layer left this addon. A game with health and no weapons
+	# replicates three properties rather than six.
+	_check(specs.size() == 3, "the bridge describes every replicated health property")
 
-	var owner_only := 0
 	for spec in specs:
-		if bool(spec["owner_only"]):
-			owner_only += 1
-	_check(owner_only == 2, "ammunition is owner-only, so opponents cannot read it")
+		_check(
+			not bool(spec["owner_only"]),
+			"health is public: everyone draws everyone's health bar",
+			String(spec["property"])
+		)
 
 	var health := DotHealth.new()
 	health.max_health = 100.0
@@ -1399,30 +1124,23 @@ func _test_net_sync() -> void:
 	health.health = 73.4
 	health.armour = 12.0
 
-	var arsenal := DotArsenal.new()
-	arsenal.tick_rate = 60
-	add_child(arsenal)
-	arsenal.give(_rifle(), 1)
-	arsenal.select(1, 0)
-
 	var behaviour := FakeBehaviour.new()
-	DotCombatNetSync.pull(health, arsenal, behaviour)
+	DotCombatNetSync.pull(health, behaviour)
 
 	# Ceil, not round: a player on 0.4 health is alive, and rounding to zero shows a
 	# corpse's health bar on someone still shooting back.
 	_check(behaviour.net_health == 74, "health rounds up", str(behaviour.net_health))
+	_check(behaviour.net_armour == 12, "and armour", str(behaviour.net_armour))
 	_check(behaviour.net_alive, "alive replicates")
-	_check(behaviour.net_slot == 1, "the held slot replicates")
-	_check(behaviour.net_ammo == 30, "and the magazine")
 
 	health.health = 0.4
-	DotCombatNetSync.pull(health, arsenal, behaviour)
+	DotCombatNetSync.pull(health, behaviour)
 	_check(behaviour.net_health == 1, "a player on a sliver of health is not shown dead")
 
 	var receiver_health := DotHealth.new()
 	receiver_health.max_health = 100.0
 	add_child(receiver_health)
-	DotCombatNetSync.push(behaviour, receiver_health, null)
+	DotCombatNetSync.push(behaviour, receiver_health)
 	_close(receiver_health.health, 1.0, "received health is written straight through")
 
 	behaviour.free()
@@ -1430,37 +1148,4 @@ func _test_net_sync() -> void:
 	remove_child(health)
 	receiver_health.queue_free()
 	remove_child(receiver_health)
-	arsenal.queue_free()
-	remove_child(arsenal)
 
-
-func _test_recoil() -> void:
-	print("recoil")
-	var weapon := DotWeapon.new()
-	weapon.recoil_pitch = 2.0
-	weapon.recoil_yaw = 0.5
-	weapon.recoil_recovery = 4.0
-
-	var recoil := DotRecoil.new()
-	recoil.kick(weapon)
-	_check(recoil.offset().x == 2.0 and recoil.offset().y == 0.5, "a shot kicks the view by the weapon's numbers", str(recoil.offset()))
-	recoil.kick(weapon)
-	_check(recoil.offset().x == 4.0 and recoil.offset().y == 0.0, "the sideways kick alternates", str(recoil.offset()))
-
-	var whole := DotRecoil.new()
-	whole.kick(weapon)
-	whole.advance(0.5)
-	var halves := DotRecoil.new()
-	halves.kick(weapon)
-	halves.advance(0.25)
-	halves.advance(0.25)
-	_check(absf(whole.offset().x - halves.offset().x) < 0.0001, "recovery is frame-rate independent")
-	_check(whole.offset().x < 2.0 and whole.offset().x > 0.0, "and sheds a fraction per second rather than all at once", str(whole.offset().x))
-	whole.advance(10.0)
-	_check(whole.offset() == Vector2.ZERO, "and settles to exactly zero")
-
-	var burst := DotRecoil.new()
-	burst.max_pitch = 5.0
-	for _i in range(20):
-		burst.kick(weapon)
-	_check(burst.offset().x == 5.0, "a held trigger stops at max_pitch")
