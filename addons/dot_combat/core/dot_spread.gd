@@ -19,50 +19,32 @@ extends RefCounted
 ## reproducible in practice and unprovable in principle, which is not a trade worth
 ## making for the one place in a shooter where a mismatch is invisible until someone
 ## complains that a weapon "feels off".
-
-## 64-bit mask, so the mixing below stays inside GDScript's signed 64-bit ints
-## without ever going negative and turning the shifts into sign-extension.
-const _MASK := 0x7FFFFFFFFFFFFFFF
-
+##
+## [b]The mixing itself is dot-core's.[/b] This file used to carry its own splitmix64,
+## with every published constant's top bit cleared so GDScript would parse it as an
+## [int] rather than a float -- a mixer that still mixed but was no longer the
+## algorithm it named. [DotRandomStream] writes those constants once, as their signed
+## 64-bit values, so they wrap exactly as the reference does. Two implementations of
+## one algorithm is one too many when the whole point is that two machines agree.
 
 ## Mixes four integers into one well-distributed value.
 ##
-## SplitMix64's finaliser: a fixed sequence of shifts and multiplies with no table and
-## no state, which is what makes it give the same answer on a desktop, a phone and a
-## browser.
-##
-## [b]The constants have their top bit cleared.[/b] GDScript integers are signed
-## 64-bit and its literals are parsed as such, so SplitMix64's published constants —
-## every one of which is above 2^63 — do not survive being written down here. Clearing
-## the top bit keeps them odd, which is the property the mixing actually depends on,
-## and the result is no longer bit-identical to SplitMix64. That does not matter: what
-## is needed is a stable scramble, not a specific published one.
+## Kept as a named entry point on [DotSpread] rather than having callers reach for
+## [DotRandomStream] directly: what a weapon wants is "the scatter for this pellet of
+## this shot", and the four arguments in this order are that question. The mixing is
+## dot-core's -- see [method DotRandomStream.mix4].
 static func hash4(a: int, b: int, c: int, d: int) -> int:
-	var x := (a * 0x1E3779B97F4A7C15) & _MASK
-	x = (x ^ (b * 0x3F58476D1CE4E5B9)) & _MASK
-	x = (x ^ (c * 0x14D049BB133111EB)) & _MASK
-	x = (x ^ (d * 0x56E8FEB86659FD93)) & _MASK
-
-	x = (x ^ (x >> 30)) & _MASK
-	x = (x * 0x3F58476D1CE4E5B9) & _MASK
-	x = (x ^ (x >> 27)) & _MASK
-	x = (x * 0x14D049BB133111EB) & _MASK
-	x = (x ^ (x >> 31)) & _MASK
-	return x
+	return DotRandomStream.mix4(a, b, c, d)
 
 
 ## A float in [0, 1) from a hash, using the top 24 bits.
 ##
-## The top bits rather than a modulo: the low bits of a multiply-based mixer are the
-## least mixed, and 24 is what a 32-bit float can represent exactly, so the same value
-## comes back on a platform where GDScript floats are 64-bit and one where an
-## intermediate is not.
+## See [method DotRandomStream.unit_from] for why the top bits and why exactly 24.
+## This once shifted by one bit too many, which left every value in [0, 0.5) and made
+## a spread cone that only ever covered half a circle -- the suite still checks for
+## that, because the check is cheap and the symptom is not obviously a bug.
 static func unit(h: int) -> float:
-	# h is masked to 63 bits, so shifting by 39 leaves exactly 24 -- the width a
-	# 32-bit float represents exactly, and the whole range. Shifting by 40 leaves 23,
-	# and every value then falls in [0, 0.5): a scatter field clustered into one
-	# quadrant, and a spread cone that only ever covered half a circle.
-	return float(h >> 39) / 16777216.0
+	return DotRandomStream.unit_from(h)
 
 
 ## Rotates [param direction] by a scatter of at most [param angle_degrees].
@@ -85,7 +67,7 @@ static func cone(
 	var azimuth := unit(h) * TAU
 	# The second sample must not be correlated with the first, and re-mixing the hash
 	# is cheaper than a second full hash of four inputs.
-	var radial := unit(hash4(h & _MASK, pellet, shot, tick))
+	var radial := unit(hash4(h, pellet, shot, tick))
 
 	var max_cos := cos(deg_to_rad(angle_degrees))
 	var cos_theta := 1.0 - radial * (1.0 - max_cos)
