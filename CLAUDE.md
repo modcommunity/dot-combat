@@ -167,7 +167,7 @@ done
 godot --headless --path . res://examples/combat_selftest.tscn
 ```
 
-169 checks, all offline. Exits non-zero on any failure.
+141 checks, all offline. Exits non-zero on any failure.
 
 **Run it after any change to the trace, the resolver or the manager.** Four of the
 checks exist because the obvious implementation of that code is wrong: the wall tie,

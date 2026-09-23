@@ -68,6 +68,18 @@ signal armour_changed(value: float)
 ## Refuse all damage. For spectators, warmup, and the noclip case.
 @export var invulnerable: bool = false
 
+## Take damage but never die from it: health stops at [member last_stand_health].
+##
+## What an administrator's "buddha" is, and not [member invulnerable] with extra steps. A
+## player who is hit still loses health, still flinches, still shows up in a damage log and
+## still lets an attacker see they landed — which is the whole reason to prefer it to god
+## mode when testing a weapon or a fall. The damage event records what was actually lost,
+## so a scoreboard does not credit the part that would have killed them.
+@export var cannot_die: bool = false
+
+## Where [member cannot_die] stops health. Above zero, or it would be death.
+@export_range(0.1, 100.0, 0.1) var last_stand_health: float = 1.0
+
 ## Current health. Zero or below means dead.
 var health: float = 100.0
 
@@ -177,6 +189,9 @@ func apply(damage: DotDamage) -> DotDamage:
 			armour -= to_armour
 
 	var to_health := maxf(0.0, damage.amount - absorbed)
+
+	if cannot_die:
+		to_health = minf(to_health, maxf(0.0, health - maxf(last_stand_health, 0.1)))
 
 	damage.armour_absorbed = absorbed
 	damage.health_lost = minf(to_health, health)
@@ -330,6 +345,7 @@ func describe() -> Dictionary:
 		"max_health": max_health,
 		"armour": armour,
 		"alive": alive,
+		"cannot_die": cannot_die,
 		"invulnerable": invulnerable,
 		"protected_until": invulnerable_until_tick,
 		"damage_taken": damage_taken,

@@ -14,7 +14,7 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 138
+const CHECKS := 141
 
 var _passed := 0
 var _failed := 0
@@ -271,6 +271,17 @@ func _test_health() -> void:
 	_check(lethal.lethal, "a fatal hit is marked lethal")
 	_check(not health.alive, "and the victim is dead")
 	_close(health.health, 0.0, "health floors at zero rather than going negative")
+
+	# Buddha: hurt, never killed, and the event says what was really lost.
+	var buddha := DotHealth.new()
+	buddha.cannot_die = true
+	add_child(buddha)
+	var nearly := DotDamage.make(1, 2, 1000.0, type)
+	buddha.apply(nearly)
+	_check(buddha.alive and not nearly.lethal, "cannot_die takes a fatal hit and survives it")
+	_close(buddha.health, 1.0, "at its last stand")
+	_close(nearly.health_lost, 99.0, "and the event records only what was lost")
+	buddha.queue_free()
 
 	var posthumous := DotDamage.make(1, 2, 10.0, type)
 	health.apply(posthumous)
