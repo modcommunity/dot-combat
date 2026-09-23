@@ -12,7 +12,9 @@ extends RefCounted
 ## rules; the clamp is last so a game's stated maximum is a real maximum rather than
 ## a number three later multipliers can exceed.
 
-const CHANNEL := "combat.resolve"
+# No log channel: a pure function per hit. Every scale it applies is recorded on the
+# damage itself, and DotCombatManager logs that record -- which is how a surprising
+# number is explained, as the class docs say, rather than by a line per step.
 
 var rules: DotDamageRules = null
 

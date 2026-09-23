@@ -16,7 +16,9 @@ extends Node
 ## and an authoritative server must reach the same number from the same tick — and
 ## [method Time.get_ticks_msec] on two machines never does.
 
-const CHANNEL := "combat.health"
+# No log channel: per-hit state on every damageable thing, whose every change is a
+# signal. DotCombatManager logs each hit it applies, at DEBUG, with the whole damage
+# record; a line from here as well would be the same hit twice.
 
 ## Damage was applied. Carries the [DotDamage] with its outcome fields filled in.
 signal damaged(damage: DotDamage)
