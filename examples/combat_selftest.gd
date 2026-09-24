@@ -16,9 +16,17 @@ extends Node
 
 const CHECKS := 141
 
+## Sections entered against sections that ran to their last line, and against this. A
+## runtime error inside a section aborts that function and nothing says so; a section that
+## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
+## total is the other half — see docs/testing.md.
+const SECTIONS := 14
+
 var _passed := 0
 var _failed := 0
 var _failures := PackedStringArray()
+var _entered := 0
+var _completed := 0
 
 ## Players built by [method _make_player], torn down between groups.
 var _players: Array[Node3D] = []
@@ -54,6 +62,13 @@ func _run() -> void:
 	for line in _failures:
 		print("  FAIL  %s" % line)
 
+	print("%d of %d sections ran to their last line" % [_completed, _entered])
+	if _entered != SECTIONS or _completed != _entered:
+		print("ERROR: %d sections entered and %d completed, %d expected. One aborted or was skipped." % [
+			_entered, _completed, SECTIONS
+		])
+		get_tree().quit(1)
+		return
 	# The total the section counter cannot be. A runtime error inside a section aborts
 	# that function, and the counter is satisfied because the section had already
 	# announced itself. See docs/testing.md.
@@ -67,6 +82,16 @@ func _run() -> void:
 
 
 # --- Assertions ------------------------------------------------------------
+
+func _section(title: String) -> void:
+	_entered += 1
+	_group(title)
+
+
+## A section reached its last line. See [constant SECTIONS].
+func _done() -> void:
+	_completed += 1
+
 
 func _check(condition: bool, what: String, detail: String = "") -> bool:
 	if condition:
@@ -202,7 +227,7 @@ func _clear_players() -> void:
 # --- Damage type -----------------------------------------------------------
 
 func _test_damage_type() -> void:
-	_group("damage types")
+	_section("damage types")
 
 	var type := _bullet()
 
@@ -218,10 +243,11 @@ func _test_damage_type() -> void:
 
 	var flat := DotDamageType.make(&"flat")
 	_close(flat.falloff_scale(1000.0), 1.0, "no falloff configured means no falloff")
+	_done()
 
 
 func _test_hit_groups() -> void:
-	_group("hit groups")
+	_section("hit groups")
 
 	var groups := DotHitGroup.defaults()
 
@@ -232,12 +258,13 @@ func _test_hit_groups() -> void:
 	# full damage is survivable; a typo costing none is a weapon that does nothing.
 	_close(groups.multiplier(&"tail"), 1.0, "an unknown group does normal damage")
 	_check(not groups.has(&"tail"), "an unknown group is still reported as unknown")
+	_done()
 
 
 # --- Health ----------------------------------------------------------------
 
 func _test_health() -> void:
-	_group("health and armour")
+	_section("health and armour")
 
 	var health := DotHealth.new()
 	health.max_health = 100.0
@@ -337,12 +364,13 @@ func _test_health() -> void:
 
 	health.queue_free()
 	remove_child(health)
+	_done()
 
 
 # --- Spread ----------------------------------------------------------------
 
 func _test_spread_determinism() -> void:
-	_group("spread determinism")
+	_section("spread determinism")
 
 	var forward := Vector3.FORWARD
 
@@ -423,12 +451,13 @@ func _test_spread_determinism() -> void:
 	_check(centre == forward, "a fixed pattern has a centre pellet")
 	var ring := DotSpread.fixed_cone(forward, 5.0, 4, 9)
 	_close(rad_to_deg(forward.angle_to(ring)), 5.0, "and puts the rest on the ring")
+	_done()
 
 
 # --- Hitboxes --------------------------------------------------------------
 
 func _test_hitbox_geometry() -> void:
-	_group("hitbox geometry")
+	_section("hitbox geometry")
 
 	var holder := Node3D.new()
 	add_child(holder)
@@ -522,10 +551,11 @@ func _test_hitbox_geometry() -> void:
 
 	holder.queue_free()
 	remove_child(holder)
+	_done()
 
 
 func _test_hitbox_precedence() -> void:
-	_group("hitbox precedence")
+	_section("hitbox precedence")
 
 	var body := _make_player(Vector3(0.0, 0.0, -10.0))
 	var set_node := _hitboxes_of(body)
@@ -567,12 +597,13 @@ func _test_hitbox_precedence() -> void:
 	set_node.bounds_radius = 1.4
 
 	_clear_players()
+	_done()
 
 
 # --- Tracing ---------------------------------------------------------------
 
 func _test_flat_trace() -> void:
-	_group("flat trace")
+	_section("flat trace")
 
 	var trace := DotTraceFlat.with_floor(0.0)
 
@@ -603,12 +634,13 @@ func _test_flat_trace() -> void:
 	var through := walled.ray(Vector3(0.0, 1.0, 0.0), Vector3.FORWARD, 100.0)
 	_check(through.ok(), "a wall built from two points blocks a ray")
 	_close(through.distance, 3.8, "on the near side of its thickness")
+	_done()
 
 
 # --- Arsenal ---------------------------------------------------------------
 
 func _test_resolver_rules() -> void:
-	_group("damage rules")
+	_section("damage rules")
 
 	var rules := DotDamageRules.new()
 	rules.friendly_fire = false
@@ -693,6 +725,7 @@ func _test_resolver_rules() -> void:
 	resolver.resolve(vetoed)
 	_check(vetoed.refused and vetoed.refusal == "test hook", "and a hook can veto")
 	resolver.adjust = Callable()
+	_done()
 
 
 # --- Manager ---------------------------------------------------------------
@@ -709,7 +742,7 @@ func _make_manager(trace: DotTrace, rules: DotDamageRules) -> DotCombatManager:
 
 
 func _test_manager_hitscan() -> void:
-	_group("manager: hitscan")
+	_section("manager: hitscan")
 
 	var trace := DotTraceFlat.with_floor(0.0)
 	var manager := _make_manager(trace, DotDamageRules.new())
@@ -779,10 +812,11 @@ func _test_manager_hitscan() -> void:
 	manager.queue_free()
 	remove_child(manager)
 	_clear_players()
+	_done()
 
 
 func _test_manager_walls() -> void:
-	_group("manager: walls")
+	_section("manager: walls")
 
 	var trace := DotTraceFlat.with_floor(0.0)
 	# A wall between the shooter and the victim, at 5 m.
@@ -825,6 +859,7 @@ func _test_manager_walls() -> void:
 	_clear_players()
 
 	_test_cover_tie()
+	_done()
 
 
 ## A hitbox surface at exactly the same distance as a wall face.
@@ -882,7 +917,7 @@ func _test_cover_tie() -> void:
 
 
 func _test_manager_splash() -> void:
-	_group("manager: splash")
+	_section("manager: splash")
 
 	var trace := DotTraceFlat.with_floor(0.0)
 	var rules := DotDamageRules.new()
@@ -947,10 +982,11 @@ func _test_manager_splash() -> void:
 	manager2.queue_free()
 	remove_child(manager2)
 	_clear_players()
+	_done()
 
 
 func _test_manager_validation() -> void:
-	_group("manager: validating what a client claims")
+	_section("manager: validating what a client claims")
 
 	var trace := DotTraceFlat.with_floor(0.0)
 	var manager := _make_manager(trace, DotDamageRules.new())
@@ -1032,10 +1068,11 @@ func _test_manager_validation() -> void:
 	client.queue_free()
 	remove_child(client)
 	_clear_players()
+	_done()
 
 
 func _test_lag_compensation() -> void:
-	_group("lag compensation")
+	_section("lag compensation")
 
 	var trace := DotTraceFlat.with_floor(0.0)
 	var manager := _make_manager(trace, DotDamageRules.new())
@@ -1111,6 +1148,7 @@ func _test_lag_compensation() -> void:
 	manager.queue_free()
 	remove_child(manager)
 	_clear_players()
+	_done()
 
 
 # --- Net sync --------------------------------------------------------------
@@ -1125,7 +1163,7 @@ class FakeBehaviour extends Object:
 
 
 func _test_net_sync() -> void:
-	_group("net sync")
+	_section("net sync")
 
 	var specs := DotCombatNetSync.specs()
 	# Three, not six: the slot, the magazine and the reserve moved to dot-weapon's own
@@ -1170,4 +1208,5 @@ func _test_net_sync() -> void:
 	remove_child(health)
 	receiver_health.queue_free()
 	remove_child(receiver_health)
+	_done()
 
