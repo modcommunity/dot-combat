@@ -21,7 +21,10 @@ var boxes: Array[AABB] = []
 
 
 static func with_floor(y: float = 0.0) -> DotTraceFlat:
-	var trace := DotTraceFlat.new()
+	# Not this class's own name. A script that names itself in an expression, loaded after
+	# its base, cuts Godot 4.7.2's exit teardown short and leaks every script loaded before
+	# it. See docs/gdscript-hazards.md, "A script that names itself".
+	var trace := new()
 	trace.floor_y = y
 	return trace
 

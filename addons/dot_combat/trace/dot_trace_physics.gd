@@ -17,7 +17,10 @@ var _query := PhysicsRayQueryParameters3D.new()
 
 
 static func for_world(world: World3D) -> DotTracePhysics:
-	var trace := DotTracePhysics.new()
+	# Not this class's own name. A script that names itself in an expression, loaded after
+	# its base, cuts Godot 4.7.2's exit teardown short and leaks every script loaded before
+	# it. See docs/gdscript-hazards.md, "A script that names itself".
+	var trace := new()
 	trace.bind(world)
 	return trace
 
