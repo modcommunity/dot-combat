@@ -64,6 +64,9 @@ var health_lost: float = 0.0
 ## Whether this event took the victim from alive to dead.
 var lethal: bool = false
 
+## Whether the resolver judged this a critical hit. See [member DotDamageRules.critical_headshots].
+var critical: bool = false
+
 ## Free-form space for a game's own rules to carry state between hooks.
 var context: Dictionary = {}
 
@@ -134,6 +137,7 @@ func describe() -> Dictionary:
 		"armour": armour_absorbed,
 		"health": health_lost,
 		"lethal": lethal,
+		"critical": critical,
 		"scales": context.get("scales", []),
 	}
 

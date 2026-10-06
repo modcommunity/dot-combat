@@ -14,13 +14,13 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 141
+const CHECKS := 148
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 14
+const SECTIONS := 15
 
 var _passed := 0
 var _failed := 0
@@ -49,6 +49,7 @@ func _run() -> void:
 	_test_hitbox_precedence()
 	_test_flat_trace()
 	_test_resolver_rules()
+	_test_criticals()
 	_test_manager_hitscan()
 	_test_manager_walls()
 	_test_manager_splash()
@@ -638,6 +639,64 @@ func _test_flat_trace() -> void:
 
 
 # --- Arsenal ---------------------------------------------------------------
+
+func _test_criticals() -> void:
+	_section("criticals")
+
+	var rules := DotDamageRules.new()
+	var resolver := DotDamageResolver.with_rules(rules)
+	var type := _bullet()
+
+	var head := DotDamage.make(1, 3, 25.0, type)
+	head.hit_group = DotHitGroup.HEAD
+	resolver.resolve(head)
+	_check(head.critical, "a headshot is a critical by default")
+	_close(head.amount, 100.0, "and does exactly the head's damage: the default adds nothing")
+
+	var body := DotDamage.make(1, 3, 25.0, type)
+	body.hit_group = DotHitGroup.CHEST
+	resolver.resolve(body)
+	_check(not body.critical, "a body shot is not, with no chance set")
+
+	rules.critical_scale = 1.5
+	var harder := DotDamage.make(1, 3, 25.0, type)
+	harder.hit_group = DotHitGroup.HEAD
+	resolver.resolve(harder)
+	_close(harder.amount, 150.0, "critical_scale multiplies a critical after the hit group")
+
+	# A chance, rolled from the hit: over a thousand hits it lands near the chance, and the
+	# same hit rolls the same every time.
+	rules.critical_scale = 1.0
+	rules.critical_headshots = false
+	rules.critical_chance = 0.25
+	var crits := 0
+	for tick in range(1000):
+		var hit := DotDamage.make(1, 3, 10.0, type)
+		hit.tick = tick
+		hit.weapon_id = &"rifle"
+		resolver.resolve(hit)
+		if hit.critical:
+			crits += 1
+	_check(crits > 200 and crits < 300, "a 25% chance lands near a quarter of hits",
+		"%d of 1000" % crits)
+
+	var again := DotDamage.make(1, 3, 10.0, type)
+	again.tick = 77
+	again.weapon_id = &"rifle"
+	var twice := DotDamage.make(1, 3, 10.0, type)
+	twice.tick = 77
+	twice.weapon_id = &"rifle"
+	_check(
+		resolver.is_critical(again) == resolver.is_critical(twice)
+			and DotDamageResolver.critical_roll(again) == DotDamageResolver.critical_roll(twice),
+		"the same hit rolls the same, on any machine and any replay"
+	)
+
+	var own := DotDamage.make(1, 1, 10.0, type)
+	rules.critical_chance = 1.0
+	_check(not resolver.is_critical(own), "self damage is never a critical")
+	_done()
+
 
 func _test_resolver_rules() -> void:
 	_section("damage rules")

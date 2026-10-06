@@ -155,6 +155,10 @@ dot-server.
 The ~30-line `DotNetBehaviour` that joins dot-combat to dot-net belongs in the game.
 The worked example is in `DotCombatNetSync`'s class documentation.
 
+## A critical is a flag before it is a number
+
+`DotDamageRules.critical_headshots` (on), `critical_chance` (0) and `critical_scale` (1) decide `DotDamage.critical`. **With the defaults no damage number changes**: a headshot is flagged and does the head's damage, exactly as before. The flag is what a game rewards — coins out of the body, a health drop, a meter, a marker — so the payoff is the game's and the judgement is here, once. The chance is rolled from the hit (`critical_roll`: attacker, victim, tick, weapon, hashed as text) for the same reason spread is: a random stream is a seed somebody has to share, and nobody does. Only health replicates, so a client learns a hit was critical from the game's own hit event.
+
 ## Validating changes
 
 ```bash
@@ -167,7 +171,7 @@ done
 godot --headless --path . res://examples/combat_selftest.tscn
 ```
 
-141 checks, all offline. Exits non-zero on any failure.
+148 checks, all offline. Exits non-zero on any failure.
 
 **Run it after any change to the trace, the resolver or the manager.** Four of the
 checks exist because the obvious implementation of that code is wrong: the wall tie,

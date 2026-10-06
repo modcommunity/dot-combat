@@ -67,7 +67,7 @@ Whatever produced the shot runs on the owning client and on the server alike, an
 | `DotTrace` | Where a shot goes. `DotTracePhysics` for a real world, `DotTraceFlat` for a headless one. |
 | `DotShot` | One thing that was fired, describing its own damage, range and splash. |
 | `DotSpread` | Deterministic scatter. The reason prediction works. |
-| `DotDamageRules` / `DotDamageResolver` | Friendly fire, self damage, hit groups, falloff and clamping, in one order, once. |
+| `DotDamageRules` / `DotDamageResolver` | Friendly fire, self damage, hit groups, criticals (headshots and/or a chance, flagged on `DotDamage.critical`, an optional extra multiplier), falloff and clamping, in one order, once. |
 | `DotCombatManager` | Tracing, lag compensation, damage application, kill reporting. |
 | `DotCombatNetSync` | What to replicate, without naming a dot-net type. |
 

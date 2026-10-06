@@ -37,6 +37,26 @@ extends Resource
 ## and what an explosion always wants — see [member DotDamageType.uses_hit_groups].
 @export var hit_groups: bool = true
 
+@export_group("Criticals")
+
+## Whether a headshot is a critical hit.
+##
+## [b]A flag, not a number.[/b] With [member critical_scale] at 1 a critical does exactly
+## the damage it did before; what changes is [member DotDamage.critical], which is what a
+## game hangs its rewards on — a burst of coins out of the body, a health drop, a meter
+## filling, a marker over the victim. The head's own multiplier is still the hit group's.
+@export var critical_headshots: bool = true
+
+## Chance, 0 to 1, that any other hit is a critical too. 0 for none.
+##
+## [b]Rolled from the hit itself, never from a random stream[/b] — attacker, victim, tick
+## and weapon hashed — so the server, a client predicting the marker, and a replay of the
+## same hit all agree about it, and a seed nobody shares cannot make them disagree.
+@export_range(0.0, 1.0, 0.01) var critical_chance: float = 0.0
+
+## Extra damage multiplier on a critical, applied after the hit group. 1 for none.
+@export_range(0.0, 10.0, 0.05) var critical_scale: float = 1.0
+
 @export_group("Falloff")
 
 @export var falloff: bool = true

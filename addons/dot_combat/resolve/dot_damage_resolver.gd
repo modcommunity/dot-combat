@@ -75,6 +75,11 @@ func resolve(damage: DotDamage) -> DotDamage:
 	if rules.hit_groups and type.uses_hit_groups and hit_groups != null:
 		damage.scale_by(hit_groups.multiplier(damage.hit_group), "group")
 
+	damage.critical = is_critical(damage)
+
+	if damage.critical and not is_equal_approx(rules.critical_scale, 1.0):
+		damage.scale_by(rules.critical_scale, "critical")
+
 	if adjust.is_valid():
 		adjust.call(damage)
 
@@ -88,6 +93,29 @@ func resolve(damage: DotDamage) -> DotDamage:
 		damage.refuse("below the minimum of %.1f" % rules.minimum)
 
 	return damage
+
+
+## Whether [param damage] is a critical hit under these rules. Pure: the same hit gives
+## the same answer on every machine and every replay. Self and world damage never are.
+func is_critical(damage: DotDamage) -> bool:
+	if rules == null or damage.is_self_damage() or damage.attacker == 0:
+		return false
+
+	if rules.critical_headshots and damage.is_headshot():
+		return true
+
+	if rules.critical_chance <= 0.0:
+		return false
+
+	return critical_roll(damage) < rules.critical_chance
+
+
+## A number in [0, 1) that is a function of the hit and nothing else.
+static func critical_roll(damage: DotDamage) -> float:
+	var key := "%d|%d|%d|%s" % [damage.attacker, damage.victim, damage.tick, damage.weapon_id]
+	# The text's own hash, not hash() of an Array: a String's hash is its characters, which
+	# is the same on every build of the engine the family runs.
+	return float(key.hash() & 0xFFFFFF) / float(0x1000000)
 
 
 ## The damage an attacker takes back for hitting a team-mate, or null.
