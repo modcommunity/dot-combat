@@ -28,7 +28,13 @@ extends DotConfig
 ## The cap is a cheat bound, not a performance one: a client that reports an old view
 ## tick is asking the server to resolve its shot against a world that no longer
 ## exists, and without a cap it can ask for one arbitrarily far back.
-@export_range(0.0, 1000.0, 5.0) var max_rewind_ms: float = 250.0
+##
+## 1000 because what a shooter needs is a round trip plus the interpolation delay, and
+## a player across an ocean (300-400 ms) needs about half a second of it. At the old
+## 250 every such player's shots were judged against a world that had moved on, so
+## they had to lead targets by the difference. A second is the bound the round-based
+## shooters have shipped with for twenty years; lower it per game for a tighter one.
+@export_range(0.0, 1000.0, 5.0) var max_rewind_ms: float = 1000.0
 
 ## Extra milliseconds allowed on top of a client's measured latency.
 ##
