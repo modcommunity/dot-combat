@@ -613,9 +613,9 @@ func cvar_specs() -> Array[Dictionary]:
 ## cvar set before this ran (argv, a config executed early, the deploy's content.yml) already
 ## holds the operator's value.
 ##
-## The cvar is the server's: a client's own manager keeps its default, so with 0 or 2 a
-## client's predicted tracer can end somewhere the server's shot did not. Damage is only
-## ever the server's, so the cost is cosmetic.
+## [b]Pass dot-server's FLAG_REPLICATED in [param flags][/b], and have each client's manager
+## [method follow_cvars] its link: the value then reaches every client, which predicts its
+## tracers and impacts under the server's rule rather than its own default.
 func bind_cvars(add: Callable, flags: int = 0) -> Array:
 	var made: Array = []
 
@@ -672,6 +672,50 @@ func set_cvar(cvar_name: String, value: String) -> bool:
 
 func _on_cvar_changed(_old: String, new_value: String, cvar_name: String) -> void:
 	var _applied := set_cvar(cvar_name, new_value)
+
+
+## Keeps a client's [member rules] on the server's values of [method cvar_specs]' cvars, as
+## [param source] reports them: dot-server's `DotClientLink`, or anything with a
+## `replicated_cvar(name, fallback) -> String` and a `replicated_cvar_changed(name, value)`
+## signal. Applies what the source already holds, then every change. True when it is
+## following.
+##
+## [b]Why a client needs the server's level at all.[/b] Damage is only the server's, but a
+## client traces its own shots for tracers, impacts and hit markers. Left at the default 1
+## against a server on 0 or 2, the predicted tracer stopped in a team-mate the server's shot
+## went through, or went through one the server's shot hit: every shot near a friend drew
+## somewhere it did not land.
+##
+## [b]Duck-typed, like [method bind_cvars][/b]: this addon names nothing outside dot-core. A
+## source without the method or the signal (an older shell's link) is refused and the
+## manager keeps its default, which is what every client did before. Calling it again with
+## the same source is harmless; a manager rebuilt with the world needs it called again.
+func follow_cvars(source: Object) -> bool:
+	if source == null or not is_instance_valid(source):
+		return false
+	if not source.has_method(&"replicated_cvar") or not source.has_signal(&"replicated_cvar_changed"):
+		DotLog.debug(CHANNEL, "cvar source cannot replicate; keeping this manager's own rules", {
+			"source": source.get_class(),
+		})
+		return false
+
+	for spec in cvar_specs():
+		var cvar_name: String = spec["name"]
+		var held := String(source.call(&"replicated_cvar", cvar_name, ""))
+		if held != "":
+			var _applied := set_cvar(cvar_name, held)
+
+	if not source.is_connected(&"replicated_cvar_changed", _on_replicated_cvar):
+		source.connect(&"replicated_cvar_changed", _on_replicated_cvar)
+
+	return true
+
+
+func _on_replicated_cvar(cvar_name: String, value: String) -> void:
+	for spec in cvar_specs():
+		if String(spec["name"]) == cvar_name:
+			var _applied := set_cvar(cvar_name, value)
+			return
 
 
 func _apply_splash(shot: DotShot) -> void:

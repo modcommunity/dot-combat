@@ -14,13 +14,13 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 172
+const CHECKS := 183
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 17
+const SECTIONS := 18
 
 var _passed := 0
 var _failed := 0
@@ -53,6 +53,19 @@ class FakeCvar extends RefCounted:
 		changed.emit(old, text)
 
 
+## Stands in for dot-server's DotClientLink: the two members follow_cvars asks for.
+class FakeLink extends Node:
+	signal replicated_cvar_changed(cvar_name: String, value: String)
+	var replicated_cvars := {}
+
+	func replicated_cvar(cvar_name: String, fallback: String = "") -> String:
+		return String(replicated_cvars.get(cvar_name, fallback))
+
+	func tell(cvar_name: String, value: String) -> void:
+		replicated_cvars[cvar_name] = value
+		replicated_cvar_changed.emit(cvar_name, value)
+
+
 ## Players built by [method _make_player], torn down between groups.
 var _players: Array[Node3D] = []
 
@@ -78,6 +91,7 @@ func _run() -> void:
 	_test_manager_hitscan()
 	_test_muzzle_inside_body()
 	_test_team_mate_pass_through_cvar()
+	_test_client_follows_the_server_cvar()
 	_test_manager_walls()
 	_test_manager_splash()
 	_test_manager_validation()
@@ -1103,6 +1117,69 @@ func _test_team_mate_pass_through_cvar() -> void:
 
 	manager.queue_free()
 	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+## A client's manager on the server's mp_teammate_passthrough, through its link. What it
+## guards: a client left on the default 1 against a server on 2 drew its tracer into the
+## team-mate the server's shot went through (and at 0, through one the server's shot hit).
+func _test_client_follows_the_server_cvar() -> void:
+	_section("manager: a client follows the server's pass-through cvar")
+
+	var rules := DotDamageRules.new()
+	rules.friendly_fire = true
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), rules)
+	manager.is_authority = false
+	var teams := {1: 1, 2: 1, 3: 2}
+	manager.resolver.team_of = func(id: int) -> int: return int(teams.get(id, 0))
+
+	var shooter := _make_player(Vector3.ZERO)
+	var friend := _make_player(Vector3(0.0, 0.0, -3.0))
+	var enemy := _make_player(Vector3(0.0, 0.0, -10.0))
+	for pair in [[shooter, 1], [friend, 2], [enemy, 3]]:
+		_hitboxes_of(pair[0]).register_with(manager, pair[1])
+		manager.register_health(pair[1], _health_of(pair[0]))
+
+	var index := [0]
+	var predicted := func() -> Array:
+		index[0] += 1
+		var shot := _rifle_shot(1, 900 + index[0], index[0])
+		shot.origin = Vector3(0.0, 1.4, 0.0)
+		shot.direction = Vector3.FORWARD
+		shot.scatter()
+		var out := []
+		for damage in manager.resolve_shot(shot).damages:
+			out.append(damage.victim)
+		return out
+
+	_check(predicted.call() == [2], "on its own default a client predicts the team-mate in the line is hit")
+
+	_check(not manager.follow_cvars(RefCounted.new()), "a source that cannot replicate (an older link) is refused")
+	_check(rules.pass_through_level() == 1, "and the manager keeps its default")
+
+	# The server said 2 before this client's world was built: the table is already there.
+	var link := FakeLink.new()
+	add_child(link)
+	link.replicated_cvars["mp_teammate_passthrough"] = "2"
+	_check(manager.follow_cvars(link), "a link with replicated cvars is followed")
+	_check(rules.pass_through_level() == 2, "the value the link already holds is applied at once")
+	_check(predicted.call() == [3], "so the client's predicted shot goes through the team-mate, as the server's does")
+	_close(_health_of(friend).health, 100.0, "and a client's manager still applies no damage")
+
+	link.tell("mp_teammate_passthrough", "0")
+	_check(rules.pass_through_level() == 0, "a live change on the server reaches the client's rules")
+	friend.position = Vector3.ZERO
+	_check(predicted.call() == [2], "at 0 the client predicts the team-mate at the muzzle is hit, as the server does")
+
+	_check(manager.follow_cvars(link) and link.get_signal_connection_list(&"replicated_cvar_changed").size() == 1,
+		"following the same link twice connects once")
+	link.tell("sv_cheats", "1")
+	_check(rules.pass_through_level() == 0, "another cvar on the link changes nothing here")
+
+	manager.queue_free()
+	remove_child(manager)
+	link.queue_free()
 	_clear_players()
 	_done()
 

@@ -12,5 +12,6 @@ extends RefCounted
 # 3: DotDamageRules.pass_through_team_mates, PASS_THROUGH_* and pass_through_level() /
 #    set_pass_through_level(); DotCombatManager.CVAR_TEAMMATE_PASSTHROUGH, cvar_specs(),
 #    bind_cvars() and set_cvar() (the mp_teammate_passthrough server cvar).
-const LEVEL := 3
+# 4: DotCombatManager.follow_cvars() (a client keeps the server's replicated cvars).
+const LEVEL := 4
 const OLDEST := 1

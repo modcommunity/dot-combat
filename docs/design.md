@@ -65,7 +65,7 @@ Whether shots go through team-mates is a server's choice, not only a game author
 - **Live.** A change writes through to `rules`, which the resolver shares, so the next shot uses it; a value set before binding (argv, a config, the deploy's `content.yml`) is read back when it binds.
 - **Rays only.** Level 2 leaves splash alone: an explosion still reaches team-mates under `friendly_fire`. With friendly fire on, level 2 means a team-mate is only ever hurt by splash, which is what an operator who picks it asked for.
 - **`pass_through_fn` replaces the muzzle question only**; level 2 still lets every team-mate through, because an operator who set it meant every team-mate.
-- **Server only.** A client's manager keeps its own rules, so at 0 or 2 a predicted tracer can stop somewhere the server's shot did not. Damage is never the client's, so the cost is cosmetic.
+- **Clients follow it.** A client traces its own shots for tracers, impacts and hit markers, so a client on the default 1 against a server on 0 or 2 drew shots stopping in, or passing through, a team-mate where the server's did the opposite. The game binds the cvar with dot-server's `FLAG_REPLICATED`, dot-server sends every replicated cvar to each client before it loads and every change afterwards (`DotEnvelope.CVARS`), and the client's manager calls `follow_cvars(link)` on its `DotClientLink` (duck-typed: `replicated_cvar()` and `replicated_cvar_changed`). A manager rebuilt with the world follows again. An older link without the method is refused and the manager keeps its default, which only costs the cosmetic mismatch.
 
 ## Zero is not a team
 
