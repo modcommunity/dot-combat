@@ -9,7 +9,7 @@ extends Node
 ## [code]class_name[/code] the project does not have fails to parse — taking every
 ## script that references it down with it. So the numbers live here and
 ## [DotCombatNetSync] describes how to replicate them, without either file naming
-## dot-net. See this project's CLAUDE.md for the bridge.
+## dot-net. See this project's docs/design.md for the bridge.
 ##
 ## [b]Applying damage is deterministic and takes no wall-clock time.[/b] Regeneration
 ## and invulnerability are counted in ticks, not seconds, because a predicted client

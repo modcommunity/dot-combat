@@ -96,7 +96,7 @@ var damage_types: Dictionary = {}
 ## [b]dot-net is not a dependency and is not named here.[/b] A game with dot-net
 ## installed assigns [code]manager.rewind_fn = net.history.rewind.bind(...)[/code] and
 ## lag compensation starts working; a game without it leaves this unset and shots
-## resolve against the present. See this project's CLAUDE.md for the four-line bridge.
+## resolve against the present. See this project's docs/design.md for the bridge.
 var rewind_fn: Callable = Callable()
 
 ## Undoes the most recent rewind. Signature: [code]func() -> int[/code].
