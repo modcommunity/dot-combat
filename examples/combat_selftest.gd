@@ -14,13 +14,13 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 148
+const CHECKS := 156
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 15
+const SECTIONS := 16
 
 var _passed := 0
 var _failed := 0
@@ -51,6 +51,7 @@ func _run() -> void:
 	_test_resolver_rules()
 	_test_criticals()
 	_test_manager_hitscan()
+	_test_muzzle_inside_body()
 	_test_manager_walls()
 	_test_manager_splash()
 	_test_manager_validation()
@@ -867,6 +868,112 @@ func _test_manager_hitscan() -> void:
 		point_blank.damages.is_empty(),
 		"a hitscan shot never hits its own shooter"
 	)
+
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+## A shot whose muzzle is already inside somebody.
+##
+## Found in a co-op game where team-mates do not collide: stacked players hit the friend
+## they stood in with every shot, aimed anywhere, because a ray starting inside a hitbox is
+## a hit at zero metres. Armed both ways: with [method DotCombatManager.pass_through_sets]
+## returning nothing, five checks here fail; with it skipping every body at the muzzle
+## (team-mate or not), the point-blank and the free-for-all checks fail.
+func _test_muzzle_inside_body() -> void:
+	_section("manager: a muzzle inside a body")
+
+	var rules := DotDamageRules.new()
+	rules.friendly_fire = true
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), rules)
+	var teams := {1: 1, 2: 1, 3: 2, 4: 2}
+	manager.resolver.team_of = func(id: int) -> int: return int(teams.get(id, 0))
+
+	# Shooter and a team-mate in the same place; an enemy ten metres ahead.
+	var shooter := _make_player(Vector3.ZERO)
+	var friend := _make_player(Vector3.ZERO)
+	var enemy := _make_player(Vector3(0.0, 0.0, -10.0))
+	for pair in [[shooter, 1], [friend, 2], [enemy, 3]]:
+		_hitboxes_of(pair[0]).register_with(manager, pair[1])
+		manager.register_health(pair[1], _health_of(pair[0]))
+
+	var index := [0]
+	var fire := func() -> DotShot:
+		index[0] += 1
+		var shot := _rifle_shot(1, 200 + index[0], index[0])
+		shot.origin = Vector3(0.0, 1.4, 0.0)
+		shot.direction = Vector3.FORWARD
+		shot.scatter()
+		return manager.resolve_shot(shot)
+
+	var victims := func(shot: DotShot) -> Array:
+		var out := []
+		for damage in shot.damages:
+			out.append(damage.victim)
+		return out
+
+	var stacked: DotShot = fire.call()
+	_check(
+		victims.call(stacked) == [3],
+		"a shot from inside a team-mate goes on to the enemy it was aimed at",
+		str(victims.call(stacked))
+	)
+	_close(_health_of(friend).health, 100.0, "and the team-mate takes nothing")
+
+	# Friendly fire off is not enough on its own: the friend refuses the damage but still
+	# eats the bullet, and the enemy is never reached.
+	rules.friendly_fire = false
+	var no_ff: DotShot = fire.call()
+	_check(
+		victims.call(no_ff) == [3] and not no_ff.damages[0].refused,
+		"with friendly fire off the enemy is still reached, not lost to the friend",
+		str(victims.call(no_ff))
+	)
+	rules.friendly_fire = true
+
+	# The point-blank case the zero-distance rule exists for must survive.
+	var hugger := _make_player(Vector3.ZERO)
+	_hitboxes_of(hugger).register_with(manager, 4)
+	manager.register_health(4, _health_of(hugger))
+	var point_blank: DotShot = fire.call()
+	_check(
+		victims.call(point_blank) == [4] and is_zero_approx(point_blank.damages[0].distance),
+		"an enemy holding the muzzle is still a point-blank hit at 0 m",
+		str(victims.call(point_blank))
+	)
+	manager.forget(4)
+
+	# A team-mate in the line, muzzle outside them, is friendly fire as the rules say.
+	friend.position = Vector3(0.0, 0.0, -3.0)
+	var in_line: DotShot = fire.call()
+	_check(victims.call(in_line) == [2], "a team-mate merely in the line is still hit")
+	friend.position = Vector3.ZERO
+
+	# The policy is a rule, and can be turned off.
+	rules.pass_through_team_mate_at_muzzle = false
+	var old_way: DotShot = fire.call()
+	_check(victims.call(old_way) == [2], "with the rule off the stacked team-mate is hit again")
+	rules.pass_through_team_mate_at_muzzle = true
+
+	# And replaced: a game whose overlap is not a team question.
+	manager.pass_through_fn = func(_s: DotShot, _set: DotHitboxSet, id: int) -> bool:
+		return id == 3
+	friend.position = Vector3(0.0, 0.0, -10.0)
+	enemy.position = Vector3.ZERO
+	var custom: DotShot = fire.call()
+	_check(
+		victims.call(custom) == [2],
+		"pass_through_fn replaces the team rule",
+		str(victims.call(custom))
+	)
+	manager.pass_through_fn = Callable()
+
+	# With no teams at all (a free-for-all) everyone holding the muzzle is an enemy.
+	manager.resolver.team_of = Callable()
+	var ffa: DotShot = fire.call()
+	_check(victims.call(ffa) == [3], "without teams a body holding the muzzle is hit")
 
 	manager.queue_free()
 	remove_child(manager)

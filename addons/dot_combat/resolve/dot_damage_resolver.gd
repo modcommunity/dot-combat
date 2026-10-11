@@ -150,6 +150,15 @@ func reflection(damage: DotDamage) -> DotDamage:
 	return back
 
 
+## Whether two entities are team-mates under [member team_of]. Never true for an entity and
+## itself, for entity 0 (the world), or for two players with no team (team 0).
+##
+## Public because the manager asks it before a shot is traced, not only after a hit: see
+## [method DotCombatManager.pass_through_sets].
+func are_team_mates(a: int, b: int) -> bool:
+	return _same_team(a, b)
+
+
 func _same_team(a: int, b: int) -> bool:
 	if a == 0 or b == 0 or a == b:
 		return false

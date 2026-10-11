@@ -169,6 +169,25 @@ func overlaps_sphere(centre: Vector3, radius: float) -> bool:
 	return false
 
 
+## Whether [param point] is inside any enabled hitbox of this set.
+##
+## What [method DotCombatManager.pass_through_sets] asks of a shot's muzzle: a ray that
+## starts inside a hitbox hits it at distance zero (see [DotHitbox]), so "does this body
+## hold the muzzle" is the question that decides whether a shot can see past it at all.
+func contains_point(point: Vector3) -> bool:
+	if not enabled:
+		return false
+
+	if bounds_centre().distance_to(point) > bounds_radius:
+		return false
+
+	for box in _hitboxes:
+		if box.overlaps_sphere(point, 0.0):
+			return true
+
+	return false
+
+
 ## The closest point on any hitbox to [param point], and its distance.
 ##
 ## Splash uses this rather than the entity origin so that a rocket beside someone's

@@ -13,3 +13,7 @@ The same local SplitMix64 had every published constant's top bit cleared, becaus
 ## `DotShot` held a `DotWeapon`
 
 Before dot-weapon existed, the shot pointed at a weapon resource and the manager read damage, range and delivery off it, so nothing that was not a gun could be resolved. Weapons (`DotWeapon`, `DotArsenal`, `DotWeaponState`, `DotRecoil`, `DotCombatCommand`) moved to dot-weapon and the shot describes itself. `DotSpread` stayed here, because scatter is a property of a shot and putting the same hash in two addons is the duplication the family guards hardest against. `DotCombatNetSync` lost the slot, magazine and reserve at the same time.
+
+## Stacked team-mates shot each other
+
+A co-op horde game whose survivors do not collide lost rounds to friendly fire: four bots following one path stood inside each other, and since a ray starting inside a hitbox is a hit at 0 m, every shot from inside a friend hit that friend, aimed anywhere (200 to 500 friendly damage a minute). The game fixed it first in its own trace subclass; the rule moved here as `DotCombatManager.pass_through_sets` so every game with teams gets it without a fork. The suite's "a muzzle inside a body" section keeps both halves: the stacked friend is passed through, and an enemy holding the muzzle is still hit.

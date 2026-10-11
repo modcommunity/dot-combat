@@ -24,6 +24,23 @@ extends Resource
 ## deterrent, and the reason [member friendly_fire] is survivable in a public game.
 @export_range(0.0, 2.0, 0.05) var friendly_reflect: float = 0.0
 
+## Whether a shot passes through a team-mate whose hitboxes already hold the muzzle.
+##
+## A ray that starts inside a hitbox hits it at distance zero, which is right for a
+## shotgun pressed against an enemy's chest. In a game where team-mates do not collide
+## (most networked ones: player-player collision is what makes prediction disagree), two
+## of them can stand in one place, and then every shot, aimed anywhere, hits the friend
+## at zero metres and nothing else. That friend was never aimed at. On, the manager
+## leaves such a team-mate out of the shot and it goes on to what it was aimed at; an
+## enemy holding the muzzle is still a point-blank hit, and a team-mate merely in the
+## line (muzzle outside them) is still hit under [member friendly_fire].
+##
+## On regardless of [member friendly_fire]: with friendly fire off the stacked friend
+## does not take damage, but still eats the bullet, so the shot that should have reached
+## the enemy is lost. Off restores the old geometry-only behaviour. For a rule this flag
+## cannot express, assign [member DotCombatManager.pass_through_fn].
+@export var pass_through_team_mate_at_muzzle: bool = true
+
 @export_group("Self")
 
 ## Whether a player can damage themselves at all. Rocket jumping needs this on.
@@ -98,6 +115,7 @@ func describe() -> Dictionary:
 		"friendly_fire": friendly_fire,
 		"friendly_scale": friendly_scale,
 		"reflect": friendly_reflect,
+		"pass_through_team_mate_at_muzzle": pass_through_team_mate_at_muzzle,
 		"self_damage": self_damage,
 		"hit_groups": hit_groups,
 		"falloff": falloff,

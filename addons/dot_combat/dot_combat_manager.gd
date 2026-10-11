@@ -106,6 +106,16 @@ var rewind_fn: Callable = Callable()
 ## symptom is that shots start missing for everyone rather than that anything errors.
 var restore_fn: Callable = Callable()
 
+## Whether a shot passes through an entity whose hitboxes already hold its muzzle.
+## Signature: [code]func(shot: DotShot, set_node: DotHitboxSet, entity_id: int) -> bool[/code].
+##
+## Asked only for sets that contain [member DotShot.origin]; a set the muzzle is outside
+## of is always traced. Left unset, [member DotDamageRules.pass_through_team_mate_at_muzzle]
+## decides with [method DotDamageResolver.are_team_mates]. A game assigns this when "who
+## may stand inside whom" is not a team question (a passenger in a vehicle's hitboxes, a
+## mode where only some team-mates overlap).
+var pass_through_fn: Callable = Callable()
+
 ## entity id -> [DotHitboxSet].
 var _sets: Dictionary = {}
 
@@ -450,7 +460,11 @@ func _trace_shot(shot: DotShot) -> void:
 	var type := shot.damage_type if shot.damage_type != null else damage_type(&"")
 
 	var shooter := hitboxes_of(shot.attacker)
-	trace.exclude = [shooter] if shooter != null else []
+	var excluded: Array = [shooter] if shooter != null else []
+	# Inside the rewind, so "holds the muzzle" is judged where the bodies were when the
+	# shooter fired, the same positions the rays are about to be tested against.
+	excluded.append_array(pass_through_sets(shot))
+	trace.exclude = excluded
 
 	shot.impacts.clear()
 
@@ -497,6 +511,59 @@ func _trace_shot(shot: DotShot) -> void:
 			damage.scale_by(hit.hitbox.damage_scale, "hitbox")
 
 		shot.damages.append(resolver.resolve(damage))
+
+
+## The hitbox sets [param shot] passes through because they already hold its muzzle.
+##
+## [b]Why the manager and not the trace or the hitbox.[/b] [DotHitbox] counting a ray that
+## starts inside it as a hit at zero is right on its own terms (a point-blank shot on an
+## enemy), and [DotTrace] knows geometry but not teams. Only here are the attacker, the
+## victim's id and the resolver's [code]team_of[/code] all in hand, so this is the one place
+## the rule can be written once for every game instead of in each game's trace subclass.
+##
+## Public for anything else that traces a shot outside [method resolve_shot] (a client's
+## hit marker, a bot's "is a friend in my line" check): pass the result as
+## [member DotTrace.exclude] alongside the shooter, or skip these sets yourself.
+func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
+	var out: Array[DotHitboxSet] = []
+
+	if shot == null:
+		return out
+
+	var use_rule := rules != null and rules.pass_through_team_mate_at_muzzle
+
+	if not pass_through_fn.is_valid() and (not use_rule or resolver == null):
+		return out
+
+	for set_node in _set_list:
+		if set_node == null or not is_instance_valid(set_node):
+			continue
+
+		if not set_node.contains_point(shot.origin):
+			continue
+
+		var entity_id := _entity_id_of(set_node.entity_owner())
+
+		# The shooter's own set is excluded by the caller already; asking the policy about
+		# it would only invite a callable that returns false to shoot yourself.
+		if entity_id == shot.attacker:
+			continue
+
+		var passes: bool
+
+		if pass_through_fn.is_valid():
+			passes = bool(pass_through_fn.call(shot, set_node, entity_id))
+		else:
+			passes = resolver.are_team_mates(shot.attacker, entity_id)
+
+		if passes:
+			out.append(set_node)
+			if config != null and config.trace_shots:
+				DotLog.debug(CHANNEL, "shot passes through a body at the muzzle", {
+					"attacker": shot.attacker, "entity": entity_id,
+				})
+
+	return out
 
 
 func _apply_splash(shot: DotShot) -> void:

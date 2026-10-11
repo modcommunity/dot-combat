@@ -52,6 +52,12 @@ A ray that starts inside a hitbox reports a hit at distance zero, not a miss.
 
 `_correct_origin` relocates a shot whose reported origin is more than `config.max_origin_error` from where the server believes the shooter is. **Relocating, not refusing**: a legitimate client's origin is always slightly wrong (it is a tick ahead by construction), and refusing those shots makes the game unplayable for everyone to stop a cheat that clamping already stops. Without `set_authoritative_origin()` per entity it does nothing, and the client's claim is taken as given.
 
+## A team-mate holding the muzzle is not a target
+
+`DotHitbox` counts a ray that starts inside it as a hit at 0 m, which is right for a shotgun pressed against an enemy's chest. Where team-mates do not collide (most networked games, since player-player collision is what makes prediction disagree), two can stand in one place; then every shot, aimed anywhere, hits the friend at 0 m and nothing else. With friendly fire off it is no better: the friend refuses the damage but still eats the bullet. So `DotCombatManager._trace_shot` excludes, along with the shooter, every set from `pass_through_sets(shot)`: the sets that contain the muzzle (`DotHitboxSet.contains_point`, judged inside the rewind) and belong to a team-mate (`DotDamageResolver.are_team_mates`). An enemy holding the muzzle is still a point-blank hit; a team-mate merely in the line is still friendly fire. `DotDamageRules.pass_through_team_mate_at_muzzle` (default on) turns it off; `DotCombatManager.pass_through_fn` replaces the rule for a game whose overlap is not a team question.
+
+It lives in the manager because that is the only place that holds the attacker, the victim's id and `team_of` together: the hitbox is right on its own terms, and the trace knows geometry but not teams. Code that traces outside `resolve_shot` (a hit marker, a bot's friend-in-line check) calls `pass_through_sets` itself.
+
 ## Zero is not a team
 
 `DotDamageResolver._same_team` returns false when either side is team 0. Two unassigned players in a free-for-all comparing `0 == 0` would be allies, and with friendly fire off that is a mode where nobody can damage anybody. It is invisible until someone plays a deathmatch, so the suite covers it.

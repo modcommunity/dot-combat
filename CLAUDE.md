@@ -11,7 +11,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | Read | Before |
 | --- | --- |
 | [docs/design.md](docs/design.md) | anything: the two jobs, the self-describing shot, spread, hitboxes, ties, rewinds, origin correction, team zero, criticals, wire form, coupling, what is not here |
-| [docs/history.md](docs/history.md) | touching `DotSpread` or the shot: the half-moon spread, the hand-copied constants, the shot that held a weapon |
+| [docs/history.md](docs/history.md) | touching `DotSpread` or the shot: the half-moon spread, the hand-copied constants, the shot that held a weapon, stacked team-mates |
 
 ## Layout
 
@@ -32,7 +32,7 @@ Paths except `examples/` are in `addons/dot_combat/`.
 
 ## Running and testing
 
-The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/combat_selftest.tscn` (exits non-zero on any failure). Run it after any change to the trace, the resolver or the manager: several checks exist because the obvious implementation is wrong (the wall tie, the leaked rewind, the zero-team truce, the point-blank ray).
+The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/combat_selftest.tscn` (exits non-zero on any failure). Run it after any change to the trace, the resolver or the manager: several checks exist because the obvious implementation is wrong (the wall tie, the leaked rewind, the zero-team truce, the point-blank ray, the team-mate at the muzzle).
 
 ## Rules that bite
 
@@ -44,6 +44,7 @@ The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything
 - Ties go to the wall (a hitbox must be strictly nearer); within a set, ties go to `precedence`, then `damage_scale`. [design](docs/design.md#ties)
 - Refuse a shot before `_begin_rewind`; nothing between it and `_end_rewind` may return early. [design](docs/design.md#every-rewind-is-restored)
 - `_correct_origin` relocates, never refuses, and does nothing without `set_authoritative_origin()` per entity. [design](docs/design.md#never-trust-the-clients-muzzle)
+- A shot passes through a team-mate whose hitboxes hold the muzzle (`pass_through_sets`), never an enemy: point-blank on an enemy stays a 0 m hit. [design](docs/design.md#a-team-mate-holding-the-muzzle-is-not-a-target)
 - Team 0 is "no team" in `_same_team`, or a free-for-all with friendly fire off has nobody able to hurt anybody. [design](docs/design.md#zero-is-not-a-team)
 - Critical defaults change no number; the roll is a hash of the hit, not a stream. [design](docs/design.md#a-critical-is-a-flag-before-it-is-a-number)
 - Health replicates as integers; ammunition is dot-weapon's `DotWeaponNetSync`, not here. [design](docs/design.md#wire-form)
