@@ -14,19 +14,44 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 156
+const CHECKS := 172
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 16
+const SECTIONS := 17
 
 var _passed := 0
 var _failed := 0
 var _failures := PackedStringArray()
 var _entered := 0
 var _completed := 0
+
+## A stand-in for dot-server's DotConVar, which this addon may not name: what
+## [method DotCombatManager.bind_cvars] duck-types (a `changed` signal, `get_string`,
+## `with_range`), holding a value an operator set before the manager bound it.
+class FakeCvar extends RefCounted:
+	signal changed(old_value: String, new_value: String)
+	var cvar_name := ""
+	var value := ""
+	var flags := 0
+	var low := -1.0
+	var high := -1.0
+
+	func get_string() -> String:
+		return value
+
+	func with_range(p_min: float, p_max: float) -> FakeCvar:
+		low = p_min
+		high = p_max
+		return self
+
+	func set_value(text: String) -> void:
+		var old := value
+		value = text
+		changed.emit(old, text)
+
 
 ## Players built by [method _make_player], torn down between groups.
 var _players: Array[Node3D] = []
@@ -52,6 +77,7 @@ func _run() -> void:
 	_test_criticals()
 	_test_manager_hitscan()
 	_test_muzzle_inside_body()
+	_test_team_mate_pass_through_cvar()
 	_test_manager_walls()
 	_test_manager_splash()
 	_test_manager_validation()
@@ -974,6 +1000,106 @@ func _test_muzzle_inside_body() -> void:
 	manager.resolver.team_of = Callable()
 	var ffa: DotShot = fire.call()
 	_check(victims.call(ffa) == [3], "without teams a body holding the muzzle is hit")
+
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+## mp_teammate_passthrough: the server cvar over both pass-through rules, and the broad
+## rule it alone reaches (2: a team-mate anywhere in the line never blocks the shot).
+func _test_team_mate_pass_through_cvar() -> void:
+	_section("manager: the team-mate pass-through cvar")
+
+	var levels := DotDamageRules.new()
+	_check(levels.pass_through_level() == 1, "the default is 1: through a team-mate at the muzzle only")
+	levels.set_pass_through_level(0)
+	_check(
+		not levels.pass_through_team_mate_at_muzzle and not levels.pass_through_team_mates,
+		"level 0 turns both rules off"
+	)
+	levels.set_pass_through_level(2)
+	_check(
+		levels.pass_through_team_mate_at_muzzle and levels.pass_through_team_mates,
+		"level 2 turns both on"
+	)
+	levels.set_pass_through_level(7)
+	_check(levels.pass_through_level() == 2, "a level past 2 is clamped to 2")
+
+	var rules := DotDamageRules.new()
+	rules.friendly_fire = true
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), rules)
+	var teams := {1: 1, 2: 1, 3: 2, 4: 2}
+	manager.resolver.team_of = func(id: int) -> int: return int(teams.get(id, 0))
+
+	# A team-mate three metres ahead in the line, an enemy at ten: the shape the broad rule
+	# is for. The muzzle is outside the friend, so the muzzle rule never applies.
+	var shooter := _make_player(Vector3.ZERO)
+	var friend := _make_player(Vector3(0.0, 0.0, -3.0))
+	var enemy := _make_player(Vector3(0.0, 0.0, -10.0))
+	for pair in [[shooter, 1], [friend, 2], [enemy, 3]]:
+		_hitboxes_of(pair[0]).register_with(manager, pair[1])
+		manager.register_health(pair[1], _health_of(pair[0]))
+
+	var index := [0]
+	var fire := func() -> Array:
+		index[0] += 1
+		var shot := _rifle_shot(1, 400 + index[0], index[0])
+		shot.origin = Vector3(0.0, 1.4, 0.0)
+		shot.direction = Vector3.FORWARD
+		shot.scatter()
+		var out := []
+		for damage in manager.resolve_shot(shot).damages:
+			out.append(damage.victim)
+		return out
+
+	# An operator's value set before the manager bound the cvar (argv, content.yml) wins.
+	var made: Array[FakeCvar] = []
+	var add := func(n: String, value: String, _help: String, flags: int) -> FakeCvar:
+		var cv := FakeCvar.new()
+		cv.cvar_name = n
+		cv.value = "2" if n == DotCombatManager.CVAR_TEAMMATE_PASSTHROUGH else value
+		cv.flags = flags
+		made.append(cv)
+		return cv
+	var bound := manager.bind_cvars(add, 9)
+	_check(
+		bound.size() == 1 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
+		"bind_cvars registers mp_teammate_passthrough with the caller's flags",
+		str(made.map(func(c: FakeCvar) -> String: return c.cvar_name))
+	)
+	_check(made[0].low == 0.0 and made[0].high == 2.0, "ranged 0 to 2 where the cvar offers a range")
+	_check(rules.pass_through_level() == 2, "the value already set is read back when it binds")
+
+	_check(fire.call() == [3], "at 2 a team-mate in the line does not block: the enemy is hit", "")
+	_close(_health_of(friend).health, 100.0, "and the team-mate takes nothing")
+
+	# An enemy in the line still blocks: the rule is about team-mates only.
+	var second := _make_player(Vector3(0.0, 0.0, -6.0))
+	_hitboxes_of(second).register_with(manager, 4)
+	manager.register_health(4, _health_of(second))
+	_check(fire.call() == [4], "at 2 an enemy in the line is still hit first")
+	manager.forget(4)
+
+	# A game's own muzzle policy does not undo what the operator set.
+	manager.pass_through_fn = func(_s: DotShot, _set: DotHitboxSet, _id: int) -> bool: return false
+	_check(fire.call() == [3], "pass_through_fn replaces the muzzle rule, not level 2")
+	manager.pass_through_fn = Callable()
+
+	# Live: the next shot after a change uses it.
+	made[0].set_value("1")
+	_check(fire.call() == [2], "changed to 1 at runtime, a team-mate in the line is friendly fire again")
+	_check(rules.pass_through_team_mate_at_muzzle, "and the muzzle rule stays on")
+
+	made[0].set_value("0")
+	friend.position = Vector3.ZERO
+	_check(fire.call() == [2], "at 0 a team-mate holding the muzzle is hit, as before the rule")
+
+	made[0].set_value("lots")
+	_check(rules.pass_through_level() == 0, "a value that is not a number changes nothing")
+
+	_check(not manager.set_cvar("mp_other", "1"), "set_cvar refuses a name that is not its own")
 
 	manager.queue_free()
 	remove_child(manager)

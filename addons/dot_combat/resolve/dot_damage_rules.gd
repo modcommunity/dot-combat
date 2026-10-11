@@ -41,6 +41,19 @@ extends Resource
 ## cannot express, assign [member DotCombatManager.pass_through_fn].
 @export var pass_through_team_mate_at_muzzle: bool = true
 
+## Whether a shot passes through every team-mate, wherever they stand in the line.
+##
+## The broad form of [member pass_through_team_mate_at_muzzle]: a team-mate between the
+## shooter and the target never blocks the shot and is never hit by it, so with this on
+## [member friendly_fire] only reaches team-mates through splash. Off by default, because
+## "a friend in your line of fire takes the bullet" is the rule most team modes want and
+## the deterrent that makes players mind where they shoot; an operator who would rather
+## crowded doorways stopped eating shots turns it on. An enemy is always hit.
+##
+## Rays only: an explosion's splash is a separate trace and still reaches team-mates under
+## [member friendly_fire]. Implies the muzzle rule. See [method set_pass_through_level].
+@export var pass_through_team_mates: bool = false
+
 @export_group("Self")
 
 ## Whether a player can damage themselves at all. Rocket jumping needs this on.
@@ -95,6 +108,30 @@ extends Resource
 @export_range(0.0, 100000.0, 1.0) var maximum: float = 0.0
 
 
+## The two pass-through rules as one number, which is what a server cvar holds:
+## [code]0[/code] team-mates are hit and block like anybody else, [code]1[/code] a shot
+## passes through a team-mate holding the muzzle (the default), [code]2[/code] a shot
+## passes through every team-mate in its line.
+const PASS_THROUGH_NONE := 0
+const PASS_THROUGH_AT_MUZZLE := 1
+const PASS_THROUGH_ALWAYS := 2
+
+
+## [member pass_through_team_mate_at_muzzle] and [member pass_through_team_mates] as one
+## of the PASS_THROUGH_* levels.
+func pass_through_level() -> int:
+	if pass_through_team_mates:
+		return PASS_THROUGH_ALWAYS
+	return PASS_THROUGH_AT_MUZZLE if pass_through_team_mate_at_muzzle else PASS_THROUGH_NONE
+
+
+## Sets both pass-through rules from a PASS_THROUGH_* level, clamped to 0..2.
+func set_pass_through_level(level: int) -> void:
+	var clamped := clampi(level, PASS_THROUGH_NONE, PASS_THROUGH_ALWAYS)
+	pass_through_team_mates = clamped == PASS_THROUGH_ALWAYS
+	pass_through_team_mate_at_muzzle = clamped >= PASS_THROUGH_AT_MUZZLE
+
+
 static func permissive() -> DotDamageRules:
 	var rules := DotDamageRules.new()
 	rules.friendly_fire = true
@@ -116,6 +153,7 @@ func describe() -> Dictionary:
 		"friendly_scale": friendly_scale,
 		"reflect": friendly_reflect,
 		"pass_through_team_mate_at_muzzle": pass_through_team_mate_at_muzzle,
+		"pass_through_team_mates": pass_through_team_mates,
 		"self_damage": self_damage,
 		"hit_groups": hit_groups,
 		"falloff": falloff,

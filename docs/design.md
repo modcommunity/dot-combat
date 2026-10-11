@@ -58,6 +58,15 @@ A ray that starts inside a hitbox reports a hit at distance zero, not a miss.
 
 It lives in the manager because that is the only place that holds the attacker, the victim's id and `team_of` together: the hitbox is right on its own terms, and the trace knows geometry but not teams. Code that traces outside `resolve_shot` (a hit marker, a bot's friend-in-line check) calls `pass_through_sets` itself.
 
+### The operator decides: `mp_teammate_passthrough`
+
+Whether shots go through team-mates is a server's choice, not only a game author's, so the manager owns one server cvar, `mp_teammate_passthrough`, and every game with teams binds it with one line on its authoritative manager: `combat.bind_cvars(add_cvar, flags)` from its server module (the same duck-typed shape as dot-npc-ai's `DotNpcAiSkill.bind_cvars`, because dot-server is not a dependency). `0` team-mates are hit and block like anybody (the behaviour before the muzzle rule), `1` a shot passes through a team-mate holding the muzzle (the default), `2` shots pass through every team-mate in the line (`DotDamageRules.pass_through_team_mates`, off by default). The levels map onto the two rule flags through `DotDamageRules.set_pass_through_level`.
+
+- **Live.** A change writes through to `rules`, which the resolver shares, so the next shot uses it; a value set before binding (argv, a config, the deploy's `content.yml`) is read back when it binds.
+- **Rays only.** Level 2 leaves splash alone: an explosion still reaches team-mates under `friendly_fire`. With friendly fire on, level 2 means a team-mate is only ever hurt by splash, which is what an operator who picks it asked for.
+- **`pass_through_fn` replaces the muzzle question only**; level 2 still lets every team-mate through, because an operator who set it meant every team-mate.
+- **Server only.** A client's manager keeps its own rules, so at 0 or 2 a predicted tracer can stop somewhere the server's shot did not. Damage is never the client's, so the cost is cosmetic.
+
 ## Zero is not a team
 
 `DotDamageResolver._same_team` returns false when either side is team 0. Two unassigned players in a free-for-all comparing `0 == 0` would be allies, and with friendly fire off that is a mode where nobody can damage anybody. It is invisible until someone plays a deathmatch, so the suite covers it.

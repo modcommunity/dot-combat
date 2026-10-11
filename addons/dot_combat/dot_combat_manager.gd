@@ -113,7 +113,9 @@ var restore_fn: Callable = Callable()
 ## of is always traced. Left unset, [member DotDamageRules.pass_through_team_mate_at_muzzle]
 ## decides with [method DotDamageResolver.are_team_mates]. A game assigns this when "who
 ## may stand inside whom" is not a team question (a passenger in a vehicle's hitboxes, a
-## mode where only some team-mates overlap).
+## mode where only some team-mates overlap). It replaces the muzzle rule only:
+## [member DotDamageRules.pass_through_team_mates] (the `mp_teammate_passthrough 2` setting)
+## still lets every team-mate through.
 var pass_through_fn: Callable = Callable()
 
 ## entity id -> [DotHitboxSet].
@@ -513,7 +515,8 @@ func _trace_shot(shot: DotShot) -> void:
 		shot.damages.append(resolver.resolve(damage))
 
 
-## The hitbox sets [param shot] passes through because they already hold its muzzle.
+## The hitbox sets [param shot] passes through: a team-mate's that already holds its muzzle
+## and, under [member DotDamageRules.pass_through_team_mates], every team-mate's.
 ##
 ## [b]Why the manager and not the trace or the hitbox.[/b] [DotHitbox] counting a ray that
 ## starts inside it as a hit at zero is right on its own terms (a point-blank shot on an
@@ -531,15 +534,16 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 		return out
 
 	var use_rule := rules != null and rules.pass_through_team_mate_at_muzzle
+	# The broad rule (every team-mate in the line) is asked of the resolver whatever
+	# pass_through_fn says: that callable replaces the muzzle question only, and an operator
+	# who set mp_teammate_passthrough 2 meant it for every body a game's callable lets stand.
+	var everywhere := rules != null and rules.pass_through_team_mates and resolver != null
 
-	if not pass_through_fn.is_valid() and (not use_rule or resolver == null):
+	if not pass_through_fn.is_valid() and not everywhere and (not use_rule or resolver == null):
 		return out
 
 	for set_node in _set_list:
 		if set_node == null or not is_instance_valid(set_node):
-			continue
-
-		if not set_node.contains_point(shot.origin):
 			continue
 
 		var entity_id := _entity_id_of(set_node.entity_owner())
@@ -549,21 +553,125 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 		if entity_id == shot.attacker:
 			continue
 
-		var passes: bool
+		var passes := false
 
-		if pass_through_fn.is_valid():
+		if everywhere and resolver.are_team_mates(shot.attacker, entity_id):
+			passes = true
+		elif not set_node.contains_point(shot.origin):
+			continue
+		elif pass_through_fn.is_valid():
 			passes = bool(pass_through_fn.call(shot, set_node, entity_id))
-		else:
+		elif use_rule and resolver != null:
 			passes = resolver.are_team_mates(shot.attacker, entity_id)
 
 		if passes:
 			out.append(set_node)
 			if config != null and config.trace_shots:
-				DotLog.debug(CHANNEL, "shot passes through a body at the muzzle", {
+				DotLog.debug(CHANNEL, "shot passes through a team-mate or a body at the muzzle", {
 					"attacker": shot.attacker, "entity": entity_id,
 				})
 
 	return out
+
+
+# --- Server settings -------------------------------------------------------
+
+## The cvar an operator sets to decide whether shots pass through team-mates. Values are
+## [DotDamageRules]' PASS_THROUGH_* levels: 0 never (a team-mate is hit and blocks like
+## anybody), 1 at the muzzle (the default), 2 always (team-mates never block a shot).
+const CVAR_TEAMMATE_PASSTHROUGH := "mp_teammate_passthrough"
+
+
+## The cvars [method bind_cvars] registers, as data, for a host that registers them its own way.
+func cvar_specs() -> Array[Dictionary]:
+	var level := rules.pass_through_level() if rules != null else DotDamageRules.PASS_THROUGH_AT_MUZZLE
+	var out: Array[Dictionary] = [
+		{
+			"name": CVAR_TEAMMATE_PASSTHROUGH,
+			"value": str(level),
+			"description": "Shots and team-mates: 0 a team-mate is hit and blocks the shot, 1 a shot passes through a team-mate standing at the muzzle, 2 shots pass through every team-mate in the line",
+			"min": float(DotDamageRules.PASS_THROUGH_NONE),
+			"max": float(DotDamageRules.PASS_THROUGH_ALWAYS),
+		},
+	]
+	return out
+
+
+## Registers this manager's server cvars through [param add] and keeps [member rules] in
+## step with them. Call it on the authoritative manager, after it has its [member rules].
+##
+## [param add] is a server module's `add_cvar` (so the module unregisters them when it
+## unloads) or anything with its signature: `(name, default, description, flags) -> cvar`.
+## Returns the cvars it made.
+##
+## [b]Duck-typed, because dot-server is not a dependency of this addon[/b]; the same shape
+## as dot-npc-ai's `DotNpcAiSkill.bind_cvars`. A cvar needs a `changed(old, new)` signal and
+## a `get_string()`; a range is used when it offers one.
+##
+## [b]Live:[/b] a change writes through to [member rules], which the resolver shares, so the
+## next shot uses it. [b]The current value is read back after registering[/b], because a
+## cvar set before this ran (argv, a config executed early, the deploy's content.yml) already
+## holds the operator's value.
+##
+## The cvar is the server's: a client's own manager keeps its default, so with 0 or 2 a
+## client's predicted tracer can end somewhere the server's shot did not. Damage is only
+## ever the server's, so the cost is cosmetic.
+func bind_cvars(add: Callable, flags: int = 0) -> Array:
+	var made: Array = []
+
+	for spec in cvar_specs():
+		var cvar_name: String = spec["name"]
+		var made_cvar: Variant = add.call(
+			cvar_name, String(spec["value"]), String(spec["description"]), flags
+		)
+
+		if not (made_cvar is Object) or made_cvar == null:
+			continue
+
+		var cv := made_cvar as Object
+
+		if spec.has("min") and cv.has_method(&"with_range"):
+			cv.call(&"with_range", float(spec["min"]), float(spec["max"]))
+
+		if cv.has_signal(&"changed"):
+			cv.connect(&"changed", _on_cvar_changed.bind(cvar_name))
+
+		if cv.has_method(&"get_string"):
+			set_cvar(cvar_name, String(cv.call(&"get_string")))
+
+		made.append(cv)
+
+	return made
+
+
+## Applies one of [method cvar_specs]' cvars by name. Returns false for a name that is not
+## this manager's or a value that is not a number.
+func set_cvar(cvar_name: String, value: String) -> bool:
+	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH:
+		return false
+
+	var text := value.strip_edges()
+
+	if not text.is_valid_float():
+		DotLog.warn(CHANNEL, "cvar is not a number; left as it was", {"cvar": cvar_name, "value": value})
+		return false
+
+	if rules == null:
+		rules = DotDamageRules.new()
+
+	rules.set_pass_through_level(roundi(text.to_float()))
+
+	# One object in practice (setup() hands the resolver this one), but a game that
+	# assigned the resolver its own after setup would otherwise keep the old rule there.
+	if resolver != null and resolver.rules != null and resolver.rules != rules:
+		resolver.rules.set_pass_through_level(rules.pass_through_level())
+
+	DotLog.debug(CHANNEL, "team-mate pass-through set", {"level": rules.pass_through_level()})
+	return true
+
+
+func _on_cvar_changed(_old: String, new_value: String, cvar_name: String) -> void:
+	var _applied := set_cvar(cvar_name, new_value)
 
 
 func _apply_splash(shot: DotShot) -> void:

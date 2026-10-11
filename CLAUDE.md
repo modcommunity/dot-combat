@@ -32,7 +32,7 @@ Paths except `examples/` are in `addons/dot_combat/`.
 
 ## Running and testing
 
-The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/combat_selftest.tscn` (exits non-zero on any failure). Run it after any change to the trace, the resolver or the manager: several checks exist because the obvious implementation is wrong (the wall tie, the leaked rewind, the zero-team truce, the point-blank ray, the team-mate at the muzzle).
+The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/combat_selftest.tscn` (exits non-zero on any failure). Run it after any change to the trace, the resolver or the manager: several checks exist because the obvious implementation is wrong (the wall tie, the leaked rewind, the zero-team truce, the point-blank ray, the team-mate at the muzzle, the pass-through cvar read back on bind).
 
 ## Rules that bite
 
@@ -45,6 +45,7 @@ The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything
 - Refuse a shot before `_begin_rewind`; nothing between it and `_end_rewind` may return early. [design](docs/design.md#every-rewind-is-restored)
 - `_correct_origin` relocates, never refuses, and does nothing without `set_authoritative_origin()` per entity. [design](docs/design.md#never-trust-the-clients-muzzle)
 - A shot passes through a team-mate whose hitboxes hold the muzzle (`pass_through_sets`), never an enemy: point-blank on an enemy stays a 0 m hit. [design](docs/design.md#a-team-mate-holding-the-muzzle-is-not-a-target)
+- `mp_teammate_passthrough` (0 never, 1 at the muzzle, 2 every team-mate in the line) is the manager's cvar; a game binds it with `combat.bind_cvars(add_cvar, flags)` on its authoritative manager, never with its own copy. [design](docs/design.md#the-operator-decides-mp_teammate_passthrough)
 - Team 0 is "no team" in `_same_team`, or a free-for-all with friendly fire off has nobody able to hurt anybody. [design](docs/design.md#zero-is-not-a-team)
 - Critical defaults change no number; the roll is a hash of the hit, not a stream. [design](docs/design.md#a-critical-is-a-flag-before-it-is-a-number)
 - Health replicates as integers; ammunition is dot-weapon's `DotWeaponNetSync`, not here. [design](docs/design.md#wire-form)
