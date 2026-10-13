@@ -53,12 +53,12 @@ extends RefCounted
 ##     DotWeaponNetSync.push(self, arsenal)
 ## [/codeblock]
 ##
-## And the four lines that turn lag compensation on, given a [code]DotNetManager[/code]
-## called [code]net[/code]:
+## And the two assignments that turn lag compensation on, given a [code]DotNetManager[/code]
+## called [code]net[/code] (mg-smash-copter's `sc_net_bridge.gd` is the working copy):
 ##
 ## [codeblock]
 ## manager.rewind_fn = func(view_tick: float) -> void:
-##     net.history.rewind(view_tick, net.registry.all())
+##     net.history.rewind(net.registry.all(), int(view_tick), net.clock.tick)
 ## manager.restore_fn = net.history.restore
 ## [/codeblock]
 
