@@ -5,7 +5,7 @@ extends Node
 ## Resolves shots into damage. The server-side half of dot-combat.
 ##
 ## Whoever made the shot decided that it happened; this decides what it hit and what that
-## cost. The split is not cosmetic — the arsenal runs on both ends and this runs only
+## cost. The split is not cosmetic — the shooter (dot-weapon's arsenal, or any other source of shots) runs on both ends and this runs only
 ## where the game is authoritative, so a client can predict its own fire without ever
 ## being in a position to decide who dies.
 ##
@@ -25,7 +25,7 @@ extends Node
 ## hitbox_set.register_with(manager, player_id)
 ## manager.register_health(player_id, health)
 ##
-## # Every shot the arsenal produced, on the server.
+## # Every shot the game's shooter produced, on the server.
 ## manager.resolve_shot(shot, client_view_tick)
 ## [/codeblock]
 

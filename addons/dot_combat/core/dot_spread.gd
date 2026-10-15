@@ -40,7 +40,7 @@ static func hash4(a: int, b: int, c: int, d: int) -> int:
 ## A float in [0, 1) from a hash, using the top 24 bits.
 ##
 ## See [method DotRandomStream.unit_from] for why the top bits and why exactly 24.
-## This once shifted by one bit too many, which left every value in [0, 0.5) and made
+## This once shifted a 63-bit value by 40 where 39 was needed, so one bit too few survived (23, not 24) and every value was in [0, 0.5), which made
 ## a spread cone that only ever covered half a circle -- the suite still checks for
 ## that, because the check is cheap and the symptom is not obviously a bug.
 static func unit(h: int) -> float:

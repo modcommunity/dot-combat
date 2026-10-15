@@ -8,9 +8,10 @@ extends DotConfig
 
 @export_group("Simulation")
 
-## Must match the rate the arsenals and the netcode run at. Every weapon duration is
-## converted against it, so a mismatch makes every weapon in the game fire at the
-## wrong rate — and the symptom is "the guns feel wrong", not an error.
+## Must match the rate the netcode runs at, and the rate dot-weapon's arsenals are
+## built against. Every tick count here (rewind window, rate limits) is converted
+## against it, so a mismatch skews them — and the symptom is "the hits feel wrong",
+## not an error.
 @export_range(1, 240, 1) var tick_rate: int = 64
 
 @export_group("Lag compensation")
