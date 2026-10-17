@@ -46,6 +46,7 @@ The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything
 - `_correct_origin` relocates, never refuses, and does nothing without `set_authoritative_origin()` per entity. [design](docs/design.md#never-trust-the-clients-muzzle)
 - A shot passes through a team-mate whose hitboxes hold the muzzle (`pass_through_sets`), never an enemy: point-blank on an enemy stays a 0 m hit. [design](docs/design.md#a-team-mate-holding-the-muzzle-is-not-a-target)
 - `mp_teammate_passthrough` (0 never, 1 at the muzzle, 2 every team-mate in the line) is the manager's cvar; a game binds it with `combat.bind_cvars(add_cvar, FLAG_NOTIFY | FLAG_REPLICATED)` on its authoritative manager, never with its own copy, and each client's manager calls `follow_cvars(link)`. [design](docs/design.md#the-operator-decides-mp_teammate_passthrough)
+- register_hitboxes/register_health ignore entity id 0 or a null node with a warning and count it (describe()["registrations_refused"]); register after the entity has its network id.
 - Team 0 is "no team" in `_same_team`, or a free-for-all with friendly fire off has nobody able to hurt anybody. [design](docs/design.md#zero-is-not-a-team)
 - Critical defaults change no number; the roll is a hash of the hit, not a stream. [design](docs/design.md#a-critical-is-a-flag-before-it-is-a-number)
 - Health replicates as integers; ammunition is dot-weapon's `DotWeaponNetSync`, not here. [design](docs/design.md#wire-form)

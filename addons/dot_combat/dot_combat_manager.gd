@@ -147,6 +147,7 @@ var _origins: Dictionary = {}
 var _registered_name: StringName = &""
 var _shots_resolved: int = 0
 var _shots_refused: int = 0
+var _registrations_refused: int = 0
 var _rewinds: int = 0
 
 
@@ -229,6 +230,7 @@ func setup() -> DotResult:
 ## Makes an entity shootable. Called by [method DotHitboxSet.register_with].
 func register_hitboxes(set_node: DotHitboxSet, entity_id: int) -> void:
 	if set_node == null or entity_id == 0:
+		_refuse_registration("hitboxes", entity_id, set_node == null)
 		return
 
 	_sets[entity_id] = set_node
@@ -239,6 +241,15 @@ func register_hitboxes(set_node: DotHitboxSet, entity_id: int) -> void:
 		_owner_ids[owner.get_instance_id()] = entity_id
 
 	_rebuild_set_list()
+
+
+## A registration with entity id 0 or a null node used to vanish silently, leaving an
+## entity that cannot be shot or hurt; say so, and count it for describe().
+func _refuse_registration(what: String, entity_id: int, null_node: bool) -> void:
+	_registrations_refused += 1
+	DotLog.warn(CHANNEL, "%s registration ignored: %s" % [
+		what, "node is null" if null_node else "entity id 0 is reserved (register after the entity has a network id)"
+	], {"entity": entity_id})
 
 
 func unregister_hitboxes(set_node: DotHitboxSet) -> void:
@@ -257,6 +268,7 @@ func unregister_hitboxes(set_node: DotHitboxSet) -> void:
 ## Makes an entity damageable. Without this a shot hits it and nothing happens.
 func register_health(entity_id: int, health: DotHealth) -> void:
 	if entity_id == 0 or health == null:
+		_refuse_registration("health", entity_id, health == null)
 		return
 
 	_healths[entity_id] = health
@@ -903,6 +915,7 @@ func describe() -> Dictionary:
 		"healths": _healths.size(),
 		"resolved": _shots_resolved,
 		"refused": _shots_refused,
+		"registrations_refused": _registrations_refused,
 		"rewinds": _rewinds,
 		"lagcomp": config.lag_compensation and rewind_fn.is_valid(),
 		"trace": trace.describe() if trace != null else {},

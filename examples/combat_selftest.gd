@@ -14,7 +14,7 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 183
+const CHECKS := 186
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -1365,6 +1365,14 @@ func _test_manager_validation() -> void:
 	var victim := _make_player(Vector3(0.0, 0.0, -10.0))
 	_hitboxes_of(victim).register_with(manager, 2)
 	manager.register_health(2, _health_of(victim))
+
+	# A registration that can never work is counted (and warned), not silently dropped.
+	manager.register_health(0, _health_of(victim))
+	manager.register_health(5, null)
+	manager.register_hitboxes(null, 5)
+	_check(manager.describe()["registrations_refused"] == 3, "bad registrations are counted")
+	_check(manager.health_of(0) == null, "an id-0 health is not stored")
+	_check(manager.entity_ids().size() == 1, "and no ghost entity appears", str(manager.entity_ids()))
 
 	var shooter := _make_player(Vector3(0.0, 0.0, 0.0))
 	_hitboxes_of(shooter).register_with(manager, 1)
