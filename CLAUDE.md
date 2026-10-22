@@ -50,6 +50,7 @@ The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything
 - register_hitboxes/register_health ignore entity id 0 or a null node with a warning and count it (describe()["registrations_refused"]); register after the entity has its network id.
 - Team 0 is "no team" in `_same_team`, or a free-for-all with friendly fire off has nobody able to hurt anybody. [design](docs/design.md#zero-is-not-a-team)
 - Critical defaults change no number; the roll is a hash of the hit, not a stream. [design](docs/design.md#a-critical-is-a-flag-before-it-is-a-number)
+- A hitbox's `limb` tag (not `group`, which is about damage) resolves a hit to limb, world point and impulse: `DotCombatManager.limb_hit`, or `limb_target_fn(entity) -> Object` whose `hit(point, amount, impulse)` is called (dot-npc's `DotNpcLimbs`, duck-typed; never import it). `limb_min_damage` (`cfg/addons/dot-combat/*.yml`, per limb or `default`) is the least resolved damage that counts. [design](docs/design.md#limbs)
 - Health replicates as integers; ammunition is dot-weapon's `DotWeaponNetSync`, not here. [design](docs/design.md#wire-form)
 - Name no class outside dot-core; net types are strings resolved by the game's bridge. [design](docs/design.md#coupling-nothing-is-imported)
 

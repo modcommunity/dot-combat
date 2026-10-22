@@ -30,6 +30,9 @@ var type: DotDamageType = null
 var hit_group: StringName = DotHitGroup.GENERIC
 
 ## World-space point of impact, for effects and for splash origin.
+## The hitbox's limb tag (empty for none). See [member DotHitbox.limb].
+var limb: StringName = &""
+
 var point: Vector3 = Vector3.ZERO
 
 ## Direction the damage travelled, unit length. Knockback is applied along it.
@@ -129,6 +132,7 @@ func describe() -> Dictionary:
 		"amount": amount,
 		"type": String(type.id) if type != null else "<none>",
 		"group": String(hit_group),
+		"limb": String(limb),
 		"distance": distance,
 		"weapon": String(weapon_id),
 		"tick": tick,

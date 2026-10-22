@@ -44,6 +44,10 @@ enum Shape {
 ## Box half-extents in local space.
 @export var half_extents: Vector3 = Vector3(0.2, 0.3, 0.2)
 
+## The named part of a body this region is (`head`, `legL`), for a host that cuts bodies apart. Empty: not a limb.
+## Independent of [member group], which is about damage: two hitboxes can share a group and be different limbs.
+@export var limb: StringName = &""
+
 ## An extra multiplier on top of the hit group's, for this hitbox specifically.
 ##
 ## For the case where two hitboxes share a group but not a value — a weak point on an
@@ -77,6 +81,9 @@ class Hit extends RefCounted:
 	var normal: Vector3 = Vector3.ZERO
 	var hitbox: DotHitbox = null
 	var group: StringName = DotHitGroup.GENERIC
+
+	## The hitbox's [member DotHitbox.limb], empty when it has none.
+	var limb: StringName = &""
 
 	## The entity that owns whatever was hit. Null for world geometry.
 	var entity: Node = null
@@ -191,6 +198,7 @@ func intersect_ray(
 	hit.normal = _normal_at(local_hit).normalized()
 	hit.hitbox = self
 	hit.group = effective_group()
+	hit.limb = limb
 	hit.entity = resolve_owner()
 	return hit
 
@@ -385,6 +393,7 @@ func describe() -> Dictionary:
 	return {
 		"node": name,
 		"group": String(effective_group()),
+		"limb": String(limb),
 		"shape": Shape.keys()[shape],
 		"enabled": enabled,
 		"scale": damage_scale,

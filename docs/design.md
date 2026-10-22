@@ -95,3 +95,9 @@ dot-combat names no class outside dot-core: not dot-net, dot-weapon, dot-player-
 - **Hit markers, tracers, decals, sounds.** `DotShot.impacts` and the signals carry what a presentation layer needs; no art, no audio.
 - **Ammunition as pickups.** `DotWeaponArsenal.add_ammo` is the API in dot-weapon; the world entity that calls it belongs to dot-loadout or the game.
 - **Damage over time.** No burning, bleeding or poison: `apply_damage` per tick from a game's own timer is the whole implementation, and there is no shared piece worth extracting yet.
+
+## Limbs
+
+A game that cuts bodies apart (dismemberment, a crawling zombie) needs a shot resolved to a named part and a world point. `DotHitbox.limb` is that name; it is separate from `group` because a group is a damage multiplier and two hitboxes can share one while being different limbs. The trace copies it to `Hit.limb`, the manager to `DotDamage.limb`, and after damage is applied `DotCombatManager.limb_hit(entity, limb, point, amount, impulse)` fires when the resolved damage reaches `limb_min_damage[limb]` (else `default`, else 0). Thresholds are data: `limb_min_damage:` in `cfg/addons/dot-combat/*.yml`, read at setup.
+
+What a limb does is the host's. The signal is the neutral form; `limb_target_fn` is the shortcut: a callable from entity to any object with `hit(point, amount, impulse)`, so dot-npc's `DotNpcLimbs` is driven without either addon naming the other. A host whose hitboxes are not tagged (its body has one capsule) can pass `damage.point` to `DotNpcLimbs.hit` itself; it resolves the region from the bones.

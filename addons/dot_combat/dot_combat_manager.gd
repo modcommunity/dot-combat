@@ -49,6 +49,11 @@ signal shot_resolved(shot: DotShot)
 ## client or a bug and neither is the player's business.
 signal shot_refused(shot: DotShot, reason: String)
 
+## A hit landed on a hitbox tagged with a [member DotHitbox.limb] and did at least that limb's threshold
+## ([member limb_min_damage]). Nothing here knows what a limb does: a host severs, bruises or ignores it.
+## [param entity] is the node that owns the hitbox, [param impulse] the shot's direction scaled by the damage.
+signal limb_hit(entity: Node, limb: StringName, point: Vector3, amount: float, impulse: Vector3)
+
 @export_group("Role")
 
 ## Whether this instance applies damage.
@@ -84,6 +89,14 @@ signal shot_refused(shot: DotShot, reason: String)
 ## used, which hits nothing and is almost never what a game wants — the warning at
 ## setup says so.
 var trace: DotTrace = null
+
+## Minimum resolved damage for a hit on a limb to count, by limb name; `default` covers the rest.
+## Loaded from `limb_min_damage:` in `cfg/addons/dot-combat/*.yml` by [method setup]; assign to override.
+var limb_min_damage: Dictionary = {}
+
+## Optional `func(entity: Node) -> Object`. When it returns an object with `hit(point, amount, impulse)`
+## (dot-npc's `DotNpcLimbs`), a qualifying limb hit calls it: duck-typed, so neither addon imports the other.
+var limb_target_fn: Callable = Callable()
 
 ## Turns hits into numbers. Built from [member rules] at setup if left null.
 var resolver: DotDamageResolver = null
@@ -180,6 +193,12 @@ func setup() -> DotResult:
 			return loaded.wrap("Could not load the combat configuration.")
 
 	var valid := config.validate()
+
+	var cfg_limbs := DotAddonConfig.load_dir("dot-combat")
+	if cfg_limbs.ok and limb_min_damage.is_empty():
+		var v: Variant = DotAddonConfig.get_value(cfg_limbs.value, "limb_min_damage", {})
+		if v is Dictionary:
+			limb_min_damage = v
 
 	if not valid.ok:
 		return valid
@@ -515,6 +534,8 @@ func _trace_shot(shot: DotShot) -> void:
 			type
 		)
 		damage.hit_group = hit.group
+		damage.limb = hit.limb
+		damage.context["entity"] = hit.entity
 		damage.point = hit.point
 		damage.direction = direction
 		damage.distance = hit.distance
@@ -801,6 +822,7 @@ func _apply_damages(shot: DotShot) -> void:
 			continue
 
 		damage_applied.emit(damage)
+		_emit_limb_hit(damage)
 
 		if damage.lethal:
 			entity_killed.emit(damage.victim, damage)
@@ -809,6 +831,29 @@ func _apply_damages(shot: DotShot) -> void:
 
 		if back != null:
 			shot.damages.append(back)
+
+
+## The limb threshold for [param limb]: its own entry, else `default`, else 0.
+func limb_threshold(limb: StringName) -> float:
+	return float(limb_min_damage.get(String(limb), limb_min_damage.get(limb, limb_min_damage.get("default", 0.0))))
+
+
+func _emit_limb_hit(damage: DotDamage) -> void:
+	if damage.limb == &"" or damage.amount < limb_threshold(damage.limb):
+		return
+
+	var entity: Node = damage.context.get("entity", null)
+
+	if entity == null or not is_instance_valid(entity):
+		return
+
+	var impulse := damage.direction * damage.amount
+	limb_hit.emit(entity, damage.limb, damage.point, damage.amount, impulse)
+
+	if limb_target_fn.is_valid():
+		var target: Object = limb_target_fn.call(entity)
+		if target != null and target.has_method(&"hit"):
+			target.call(&"hit", damage.point, damage.amount, impulse)
 
 
 ## Applies a damage event that did not come from a weapon.

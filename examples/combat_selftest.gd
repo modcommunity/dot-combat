@@ -14,13 +14,13 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 204
+const CHECKS := 217
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 19
+const SECTIONS := 20
 
 var _passed := 0
 var _failed := 0
@@ -97,6 +97,7 @@ func _run() -> void:
 	_test_manager_validation()
 	_test_lag_compensation()
 	_test_net_sync()
+	_test_limbs()
 	await _test_sentry()
 
 	print("")
@@ -1588,6 +1589,73 @@ func _test_net_sync() -> void:
 	remove_child(receiver_health)
 	_done()
 
+
+
+## A hit on a tagged hitbox resolves to limb, world point and impulse; a threshold gates it; the sink is duck-typed.
+func _test_limbs() -> void:
+	_section("limb tags")
+
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -10.0), 1000.0)
+	for box in _hitboxes_of(victim).get_children():
+		if box is DotHitbox:
+			box.limb = &"head" if box.group == DotHitGroup.HEAD else (&"leg" if box.group == DotHitGroup.LEG else &"")
+	_hitboxes_of(victim).register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+	manager.limb_min_damage = {"default": 10.0, "leg": 40.0}
+
+	var seen: Array = []
+	manager.limb_hit.connect(func(e: Node, l: StringName, p: Vector3, a: float, i: Vector3) -> void: seen.append([e, l, p, a, i]))
+	var sink := _LimbSink.new()
+	manager.limb_target_fn = func(_e: Node) -> Object: return sink
+
+	var shot := _rifle_shot(1, 100, 1)
+	shot.origin = Vector3(0.0, 1.62, 0.0)
+	shot.direction = Vector3.FORWARD
+	shot.scatter()
+	manager.resolve_shot(shot)
+	_check(seen.size() == 1 and seen[0][1] == &"head", "a head hit resolves to the head limb", str(seen.size()))
+	_check(seen.size() == 1 and seen[0][0] == victim, "with the entity that owns the hitbox")
+	_check(seen.size() == 1 and absf(seen[0][2].z + 9.86) < 0.05 and absf(seen[0][2].y - 1.62) < 0.01, "at the world point of the hit")
+	_check(seen.size() == 1 and seen[0][4].z < 0.0, "and an impulse along the shot")
+	_check(sink.calls.size() == 1 and sink.calls[0][0].is_equal_approx(seen[0][2]), "the duck-typed target got hit(point, amount, impulse)")
+	_check(shot.damages[0].limb == &"head", "the damage event carries the limb")
+
+	# A leg shot for 25 is under the leg's 40 threshold: it hurts, but is not a limb hit.
+	var low := _rifle_shot(1, 101, 2)
+	low.origin = Vector3(0.0, 0.3, 0.0)
+	low.direction = Vector3.FORWARD
+	low.scatter()
+	manager.resolve_shot(low)
+	_check(low.damages.size() == 1 and low.damages[0].amount > 0.0, "a sub-threshold leg hit still does damage")
+	_check(seen.size() == 1 and sink.calls.size() == 1, "but does not count as a limb hit", str(seen.size()))
+
+	manager.limb_min_damage = {"leg": 10.0}
+	var again := _rifle_shot(1, 102, 3)
+	again.origin = Vector3(0.0, 0.3, 0.0)
+	again.direction = Vector3.FORWARD
+	again.scatter()
+	manager.resolve_shot(again)
+	_check(seen.size() == 2 and seen[1][1] == &"leg", "a lower threshold lets the leg through")
+
+	manager.limb_min_damage = {}
+	_check(is_zero_approx(manager.limb_threshold(&"head")), "no thresholds means every tagged hit counts")
+	_check(DotHitbox.new().limb == &"", "an untagged hitbox has no limb")
+	_check(sink.calls.size() == 2, "the sink saw exactly the counted hits")
+	_check(DotHitbox.new().describe().has("limb"), "describe names the limb")
+
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+class _LimbSink extends RefCounted:
+	var calls: Array = []
+
+	func hit(point: Vector3, amount: float, impulse: Vector3) -> StringName:
+		calls.append([point, amount, impulse])
+		return &""
 
 
 func _test_sentry() -> void:
