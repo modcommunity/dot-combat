@@ -14,7 +14,7 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 217
+const CHECKS := 219
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -1638,6 +1638,18 @@ func _test_limbs() -> void:
 	manager.resolve_shot(again)
 	_check(seen.size() == 2 and seen[1][1] == &"leg", "a lower threshold lets the leg through")
 
+	# A target that takes the tagged limb gets it, not a point to re-resolve.
+	var tagged := _TaggedSink.new()
+	manager.limb_target_fn = func(_e: Node) -> Object: return tagged
+	var third := _rifle_shot(1, 103, 4)
+	third.origin = Vector3(0.0, 1.62, 0.0)
+	third.direction = Vector3.FORWARD
+	third.scatter()
+	manager.resolve_shot(third)
+	_check(tagged.calls.is_empty() and tagged.limb_calls.size() == 1 and tagged.limb_calls[0][0] == &"head", "a hit_limb target is told the hitbox's limb", str(tagged.limb_calls))
+	_check(tagged.limb_calls.size() == 1 and tagged.limb_calls[0][1].is_equal_approx(seen[seen.size() - 1][2]), "with the world point of the hit")
+	manager.limb_target_fn = func(_e: Node) -> Object: return sink
+
 	manager.limb_min_damage = {}
 	_check(is_zero_approx(manager.limb_threshold(&"head")), "no thresholds means every tagged hit counts")
 	_check(DotHitbox.new().limb == &"", "an untagged hitbox has no limb")
@@ -1655,6 +1667,14 @@ class _LimbSink extends RefCounted:
 
 	func hit(point: Vector3, amount: float, impulse: Vector3) -> StringName:
 		calls.append([point, amount, impulse])
+		return &""
+
+
+class _TaggedSink extends _LimbSink:
+	var limb_calls: Array = []
+
+	func hit_limb(limb: StringName, point: Vector3, amount: float, impulse: Vector3) -> StringName:
+		limb_calls.append([limb, point, amount, impulse])
 		return &""
 
 

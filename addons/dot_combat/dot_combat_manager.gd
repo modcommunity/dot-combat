@@ -852,7 +852,10 @@ func _emit_limb_hit(damage: DotDamage) -> void:
 
 	if limb_target_fn.is_valid():
 		var target: Object = limb_target_fn.call(entity)
-		if target != null and target.has_method(&"hit"):
+		# Prefer the tagged limb: re-resolving it from geometry can name another where hitboxes overlap.
+		if target != null and target.has_method(&"hit_limb"):
+			target.call(&"hit_limb", damage.limb, damage.point, damage.amount, impulse)
+		elif target != null and target.has_method(&"hit"):
 			target.call(&"hit", damage.point, damage.amount, impulse)
 
 
