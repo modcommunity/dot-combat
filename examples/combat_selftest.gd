@@ -14,13 +14,13 @@ extends Node
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 219
+const CHECKS := 227
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 20
+const SECTIONS := 21
 
 var _passed := 0
 var _failed := 0
@@ -99,6 +99,7 @@ func _run() -> void:
 	_test_net_sync()
 	_test_limbs()
 	await _test_sentry()
+	_test_defib()
 
 	print("")
 	print("%d passed, %d failed" % [_passed, _failed])
@@ -1676,6 +1677,28 @@ class _TaggedSink extends _LimbSink:
 	func hit_limb(limb: StringName, point: Vector3, amount: float, impulse: Vector3) -> StringName:
 		limb_calls.append([limb, point, amount, impulse])
 		return &""
+
+
+func _test_defib() -> void:
+	_section("defibrillator")
+
+	var d := DotDefib.new()
+	d.charges = 2
+	d.cooldown_seconds = 5.0
+	d.reach = 2.0
+	d.max_body_age = 30.0
+	_check(d.check(10.0, 5.0, 1.0).ok, "a fresh body in reach may be shocked")
+	_check(not d.check(10.0, 5.0, 3.0).ok, "one out of reach may not")
+	_check(not d.check(10.0, 31.0, 1.0).ok, "nor one past the time limit")
+	d.max_body_age = 0.0
+	_check(d.check(10.0, 9999.0, 1.0).ok, "0 as the limit is never too late")
+	d.spend(10.0)
+	_check(d.charges == 1 and not d.check(12.0, 1.0, 1.0).ok, "a shock costs a charge and starts the cooldown")
+	_check(d.check(15.0, 1.0, 1.0).ok, "and the cooldown ends")
+	d.spend(15.0)
+	_check(not d.check(99.0, 1.0, 1.0).ok, "a spent one refuses for good")
+	_check(is_equal_approx(d.revive_health(100.0), 40.0), "the revived come back with the configured share")
+	_done()
 
 
 func _test_sentry() -> void:
