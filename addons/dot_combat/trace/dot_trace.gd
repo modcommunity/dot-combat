@@ -70,6 +70,10 @@ func ray(
 		if set_node == null or not is_instance_valid(set_node):
 			continue
 
+		# The bounds first: a few hundred bodies a shot, nearly all of them nowhere near the line.
+		if not set_node.may_be_hit(from, direction, limit):
+			continue
+
 		if _is_excluded(set_node):
 			continue
 

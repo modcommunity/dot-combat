@@ -209,6 +209,12 @@ func closest_point(point: Vector3) -> Vector3:
 	return best
 
 
+## Whether a ray could hit anything of this set: enabled, has hitboxes, crosses the bounds.
+## [method intersect_ray] misses whenever this is false, and this allocates nothing.
+func may_be_hit(from: Vector3, direction: Vector3, max_distance: float) -> bool:
+	return enabled and not _hitboxes.is_empty() and _ray_hits_bounds(from, direction, max_distance)
+
+
 func bounds_centre() -> Vector3:
 	return global_transform * bounds_offset
 

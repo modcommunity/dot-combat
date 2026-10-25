@@ -579,6 +579,10 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 		if set_node == null or not is_instance_valid(set_node):
 			continue
 
+		# Without the broad rule only a body holding the muzzle can pass: ask that first, it is cheap.
+		if not everywhere and not set_node.contains_point(shot.origin):
+			continue
+
 		var entity_id := _entity_id_of(set_node.entity_owner())
 
 		# The shooter's own set is excluded by the caller already; asking the policy about
@@ -590,7 +594,7 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 
 		if everywhere and resolver.are_team_mates(shot.attacker, entity_id):
 			passes = true
-		elif not set_node.contains_point(shot.origin):
+		elif everywhere and not set_node.contains_point(shot.origin):
 			continue
 		elif pass_through_fn.is_valid():
 			passes = bool(pass_through_fn.call(shot, set_node, entity_id))
