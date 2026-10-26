@@ -14,8 +14,7 @@ addons/dot_combat/core/dot_spread.gd::long_block	6
 addons/dot_combat/dot_combat_api.gd::long_block	2
 addons/dot_combat/dot_combat_config.gd::long_block	8
 addons/dot_combat/dot_combat_manager.gd::banner	5
-addons/dot_combat/dot_combat_manager.gd::history	1
-addons/dot_combat/dot_combat_manager.gd::long_block	16
+addons/dot_combat/dot_combat_manager.gd::long_block	9
 addons/dot_combat/dot_combat_plugin.gd::long_block	1
 addons/dot_combat/net/dot_combat_net_sync.gd::long_block	5
 addons/dot_combat/resolve/dot_damage_resolver.gd::long_block	6
@@ -24,5 +23,5 @@ addons/dot_combat/trace/dot_trace.gd::long_block	5
 addons/dot_combat/trace/dot_trace_flat.gd::long_block	3
 addons/dot_combat/trace/dot_trace_physics.gd::history	1
 addons/dot_combat/trace/dot_trace_physics.gd::long_block	2
-examples/combat_selftest.gd::banner	10
-examples/combat_selftest.gd::long_block	8
+examples/combat_selftest.gd::banner	9
+examples/combat_selftest.gd::long_block	6

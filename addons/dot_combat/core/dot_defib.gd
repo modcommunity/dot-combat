@@ -2,10 +2,7 @@ class_name DotDefib
 extends RefCounted
 
 ## A defibrillator as data: what one may do, how many times, and why it refused.
-##
-## [b]Pure decision, no scene.[/b] The game owns the hold (progress, interruption on damage or
-## movement), the body and the revive; this says whether a try is allowed and what the revived
-## come back with. One per carried item, so charges and the cooldown belong to the item.
+## Pure decision, no scene; the game owns the hold, the body and the revive.
 
 ## Seconds the user holds the key at the body before the shock.
 var charge_seconds: float = 4.0

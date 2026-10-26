@@ -4,16 +4,11 @@ extends Node
 
 ## Resolves shots into damage. The server-side half of dot-combat.
 ##
-## Whoever made the shot decided that it happened; this decides what it hit and what that
-## cost. The split is not cosmetic — the shooter (dot-weapon's arsenal, or any other source of shots) runs on both ends and this runs only
-## where the game is authoritative, so a client can predict its own fire without ever
-## being in a position to decide who dies.
+## The shooter runs on both ends and this only where the game is authoritative, so a client
+## can predict its own fire without ever deciding who dies.
 ##
-## [b]No autoload.[/b] It registers itself in [DotRegistry] under
-## [constant SERVICE] and a game resolves it with a [DotNodeRef] in registry mode, or
-## holds a reference. A process running a server and a client at once — which is what
-## every one of this family's self-tests does — needs two of these, and
-## [member service_scope] is how they coexist.
+## No autoload: it registers in [DotRegistry] under [constant SERVICE]; a server and a client
+## in one process need two, told apart by [member service_scope].
 ##
 ## [codeblock]
 ## var manager := DotCombatManager.new()
@@ -58,9 +53,8 @@ signal limb_hit(entity: Node, limb: StringName, point: Vector3, amount: float, i
 
 ## Whether this instance applies damage.
 ##
-## A client instance still traces — for hit markers and for effects — but never
-## touches a [DotHealth]. Predicting damage is how a client shows a kill that did not
-## happen, which is worse than showing nothing.
+## A client instance still traces (hit markers, effects) but never touches a [DotHealth]:
+## predicted damage shows kills that did not happen.
 @export var is_authority: bool = true
 
 ## Registers under [code]dot_combat[/code], or under a scoped name when set. Two
@@ -85,9 +79,7 @@ signal limb_hit(entity: Node, limb: StringName, point: Vector3, amount: float, i
 
 @export_group("Wiring")
 
-## Where world geometry is traced. Left null a [DotTraceFlat] with no geometry is
-## used, which hits nothing and is almost never what a game wants — the warning at
-## setup says so.
+## Where world geometry is traced. Left null, an empty [DotTraceFlat] hits nothing (setup warns).
 var trace: DotTrace = null
 
 ## Minimum resolved damage for a hit on a limb to count, by limb name; `default` covers the rest.
@@ -104,31 +96,21 @@ var resolver: DotDamageResolver = null
 ## Damage types by id, so a weapon can name one rather than hold a reference.
 var damage_types: Dictionary = {}
 
-## Rewinds the world to a tick. Signature: [code]func(tick: float) -> int[/code].
-##
-## [b]dot-net is not a dependency and is not named here.[/b] A game with dot-net
-## installed assigns [code]manager.rewind_fn = net.history.rewind.bind(...)[/code] and
-## lag compensation starts working; a game without it leaves this unset and shots
-## resolve against the present. See this project's docs/design.md for the bridge.
+## Rewinds the world to a tick: [code]func(tick: float) -> int[/code]. Unset, shots resolve
+## against the present; dot-net is not named here (bridge in docs/design.md).
 var rewind_fn: Callable = Callable()
 
-## Undoes the most recent rewind. Signature: [code]func() -> int[/code].
-##
-## [b]Must be set whenever [member rewind_fn] is.[/b] A rewind that is never restored
-## leaves every hitbox in the level at a position from the past, permanently, and the
-## symptom is that shots start missing for everyone rather than that anything errors.
+## Undoes the most recent rewind: [code]func() -> int[/code]. Must be set whenever
+## [member rewind_fn] is, or every hitbox stays in the past and shots miss for everyone.
 var restore_fn: Callable = Callable()
 
 ## Whether a shot passes through an entity whose hitboxes already hold its muzzle.
 ## Signature: [code]func(shot: DotShot, set_node: DotHitboxSet, entity_id: int) -> bool[/code].
 ##
-## Asked only for sets that contain [member DotShot.origin]; a set the muzzle is outside
-## of is always traced. Left unset, [member DotDamageRules.pass_through_team_mate_at_muzzle]
-## decides with [method DotDamageResolver.are_team_mates]. A game assigns this when "who
-## may stand inside whom" is not a team question (a passenger in a vehicle's hitboxes, a
-## mode where only some team-mates overlap). It replaces the muzzle rule only:
-## [member DotDamageRules.pass_through_team_mates] (the `mp_teammate_passthrough 2` setting)
-## still lets every team-mate through.
+## Asked only for sets that contain [member DotShot.origin]. Unset,
+## [member DotDamageRules.pass_through_team_mate_at_muzzle] decides; assign for non-team
+## overlap (a passenger in a vehicle). Replaces the muzzle rule only:
+## [member DotDamageRules.pass_through_team_mates] still lets every team-mate through.
 var pass_through_fn: Callable = Callable()
 
 ## entity id -> [DotHitboxSet].
@@ -141,17 +123,11 @@ var _set_list: Array[DotHitboxSet] = []
 ## entity id -> [DotHealth].
 var _healths: Dictionary = {}
 
-## Shot rate, keyed by attacker. One limiter for everyone: [DotRateLimiter] keys its
-## own buckets and evicts idle ones, so a per-entity limiter would be a second
-## dictionary doing the same job worse.
+## Shot rate, keyed by attacker; [DotRateLimiter] keys and evicts its own buckets.
 var _shot_limiter: DotRateLimiter = null
 
-## owner node instance id -> entity id.
-##
-## The trace returns the node it hit and damage is keyed by entity id, so every pellet
-## needs that mapping. Walking the registration dictionary per pellet is O(players)
-## per pellet per shot, which a twelve-pellet shotgun on a full server turns into real
-## work — so it is maintained at registration time instead.
+## owner node instance id -> entity id, kept at registration so a pellet does not walk
+## every registration.
 var _owner_ids: Dictionary = {}
 
 ## Where the server believes each entity is, for origin validation. Optional.
@@ -232,9 +208,7 @@ func setup() -> DotResult:
 		DotRegistry.register(_registered_name, self)
 
 	if is_authority and not rewind_fn.is_valid() and config.lag_compensation:
-		# Not an error: a listen server with one local player does not need it, and a
-		# game may deliberately not want it. But "lag compensation is on" reading as
-		# "lag compensation is happening" is a wrong belief worth one line to prevent.
+		# Not an error (a listen server may not need it), but "on" must not read as "happening".
 		DotLog.info(
 			CHANNEL,
 			"lag compensation is enabled but no rewind function is wired; "
@@ -262,8 +236,7 @@ func register_hitboxes(set_node: DotHitboxSet, entity_id: int) -> void:
 	_rebuild_set_list()
 
 
-## A registration with entity id 0 or a null node used to vanish silently, leaving an
-## entity that cannot be shot or hurt; say so, and count it for describe().
+## A refused registration leaves an entity that cannot be shot or hurt; log and count it.
 func _refuse_registration(what: String, entity_id: int, null_node: bool) -> void:
 	_registrations_refused += 1
 	DotLog.warn(CHANNEL, "%s registration ignored: %s" % [
@@ -296,12 +269,7 @@ func register_health(entity_id: int, health: DotHealth) -> void:
 		health.set_tick_rate(config.tick_rate)
 
 
-## Forgets everything about an entity. Call on despawn.
-##
-## Without it the manager holds a reference to every entity that has ever existed,
-## which on a server churning through players is a leak proportional to everyone who
-## has ever connected — the same fault [code]DotNetBehaviour.forget_peer[/code] exists
-## to avoid.
+## Forgets everything about an entity. Call on despawn, or the manager leaks every entity ever seen.
 func forget(entity_id: int) -> void:
 	for owner_id in _owner_ids.keys():
 		if int(_owner_ids[owner_id]) == entity_id:
@@ -330,15 +298,10 @@ func health_of(entity_id: int) -> DotHealth:
 	return _healths.get(entity_id)
 
 
-## Every registered hitbox set, for something outside the manager that has to trace.
-##
-## A projectile in flight is the case this exists for: it has to sweep the same world
-## the manager traces against, and rebuilding the list from the registry each tick
-## would walk every entity for every rocket. Returned rather than copied, so a caller
-## must not hold it across a registration.
+## Every registered hitbox set, for a projectile that sweeps the same world. Not a copy:
+## do not hold it across a registration.
 func hitbox_sets() -> Array[DotHitboxSet]:
 	return _set_list
-
 
 
 func hitboxes_of(entity_id: int) -> DotHitboxSet:
@@ -353,10 +316,8 @@ func entity_ids() -> Array[int]:
 	return out
 
 
-## Tells the manager where the server believes an entity is, for origin validation.
-##
-## Optional. Without it a client's reported muzzle is used as given, which is safe
-## only if something else has already validated it.
+## Where the server believes an entity is, for origin validation. Without it a reported
+## muzzle is used as given.
 func set_authoritative_origin(entity_id: int, position: Vector3) -> void:
 	_origins[entity_id] = position
 
@@ -380,14 +341,9 @@ func damage_type(id: StringName) -> DotDamageType:
 
 ## Traces a shot, applies its damage, and returns it with the outcome filled in.
 ##
-## [param view_tick] is the tick the shooter was looking at, which is not the tick
-## they fired on: a client sees the world as of roughly its own tick minus its latency
-## minus its interpolation delay. Pass -1 to resolve against the present, which is
-## right for a shot the server itself produced (a bot, a turret) and wrong for one a
-## client reported.
-##
-## [b]Restoring the rewind happens on every path out of this method[/b], including the
-## refusal paths. A rewind that leaks leaves the world in the past permanently.
+## [param view_tick] is the tick the shooter was looking at (their tick minus latency and
+## interpolation delay). -1 resolves against the present: right for server-made shots, wrong
+## for a client's. The rewind is restored on every path out, or the world stays in the past.
 func resolve_shot(shot: DotShot, view_tick: float = -1.0) -> DotShot:
 	if shot == null:
 		return shot
@@ -444,13 +400,8 @@ func _validate_shot(shot: DotShot) -> String:
 	return ""
 
 
-## Relocates a shot whose reported muzzle is too far from where the server believes
-## the shooter is.
-##
-## Relocating rather than refusing: a legitimate client's origin is always a little
-## wrong — it is a tick ahead of the server by construction — and refusing those
-## shots would make the game unplayable for everyone in order to stop a cheat that
-## clamping already stops.
+## Relocates a shot whose muzzle is too far from the believed shooter position. Relocated,
+## not refused: a legitimate origin is a tick ahead by construction.
 func _correct_origin(shot: DotShot) -> void:
 	if not _origins.has(shot.attacker):
 		return
@@ -494,17 +445,14 @@ func _trace_shot(shot: DotShot) -> void:
 
 	var shooter := hitboxes_of(shot.attacker)
 	var excluded: Array = [shooter] if shooter != null else []
-	# Inside the rewind, so "holds the muzzle" is judged where the bodies were when the
-	# shooter fired, the same positions the rays are about to be tested against.
+	# Inside the rewind, so "holds the muzzle" uses the positions the rays test against.
 	excluded.append_array(pass_through_sets(shot))
 	trace.exclude = excluded
 
 	shot.impacts.clear()
 
 	if shot.deferred:
-		# A deferred shot is an entity with a lifetime; it is not resolved here. The
-		# endpoint is recorded so a caller can launch it along the right vector, and
-		# the shot produces no damage of its own.
+		# Deferred: an entity with a lifetime, not resolved here; only the endpoint is recorded.
 		for direction in shot.pellets:
 			shot.impacts.append(shot.origin + direction * shot.max_range)
 		return
