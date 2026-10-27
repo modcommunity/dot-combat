@@ -97,7 +97,7 @@ func on_landed(impact: float) -> DotDamage:
 	DotLog.debug(CHANNEL, "fall damage", {"victim": victim, "impact": impact, "amount": amount})
 	var result := _combat.apply_damage(hit)
 
-	if rules.legs_seconds > 0.0:
+	if rules.legs_seconds > 0.0 and not (result != null and result.refused):
 		legs_broken.emit(rules.legs_seconds, rules.legs_speed)
 
 	return result

@@ -33,6 +33,9 @@ var team_of: Callable = Callable()
 ## [member DotDamage.amount] or calling [method DotDamage.refuse] both work.
 var adjust: Callable = Callable()
 
+## Per-entity immunity to whole damage kinds (a class that ignores falls). Null means none.
+var immunity: DotDamageImmunity = null
+
 
 static func with_rules(p_rules: DotDamageRules) -> DotDamageResolver:
 	var resolver := DotDamageResolver.new()
@@ -56,6 +59,10 @@ func resolve(damage: DotDamage) -> DotDamage:
 
 	if type == null:
 		damage.refuse("no damage type")
+		return damage
+
+	if immunity != null and immunity.is_immune(damage.victim, type.id):
+		damage.refuse("immune to %s" % type.id)
 		return damage
 
 	if damage.is_self_damage():

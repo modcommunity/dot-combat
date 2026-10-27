@@ -1,6 +1,6 @@
 extends "res://examples/selftest/selftest_base.gd"
 
-## The defibrillator and sentry sections.
+## The defibrillator, sentry and damage immunity sections.
 
 
 func _test_defib() -> void:
@@ -127,3 +127,32 @@ func _test_sentry() -> void:
 	wall.queue_free()
 	low.queue_free()
 	_done()
+
+
+func _test_damage_immunity() -> void:
+	_section("damage immunity: per kind, wildcard, default none")
+
+	var imm := DotDamageImmunity.new()
+	_check(not imm.is_immune(5, &"fall"), "nobody is immune by default")
+	imm.set_immune(5, [&"fall", "fire"])
+	_check(imm.is_immune(5, &"fall") and imm.is_immune(5, &"fire"), "listed kinds are ignored (strings too)")
+	_check(not imm.is_immune(5, &"bullet") and not imm.is_immune(6, &"fall"), "other kinds and other entities are not")
+	imm.set_immune(5, [DotDamageImmunity.ALL])
+	_check(imm.is_immune(5, &"bullet"), "the wildcard covers every kind")
+	imm.set_immune(5, [])
+	_check(not imm.is_immune(5, &"fall") and imm.kinds_of(5).is_empty(), "an empty list clears it")
+
+	var rules := DotDamageRules.new()
+	var res := DotDamageResolver.with_rules(rules)
+	var fall := DotDamageType.new()
+	fall.id = &"fall"
+	var bullet := DotDamageType.new()
+	bullet.id = &"bullet"
+	var plain := res.resolve(DotDamage.make(0, 5, 30.0, fall))
+	_check(not plain.refused, "no immunity object: damage lands")
+	res.immunity = DotDamageImmunity.new()
+	res.immunity.set_immune(5, [&"fall"])
+	var blocked := res.resolve(DotDamage.make(0, 5, 30.0, fall))
+	_check(blocked.refused and blocked.refusal.contains("immune"), "an immune victim refuses that kind")
+	_check(not res.resolve(DotDamage.make(0, 5, 30.0, bullet)).refused, "the same victim still takes another kind")
+	_check(not res.resolve(DotDamage.make(0, 6, 30.0, fall)).refused, "another victim still takes it")

@@ -54,6 +54,7 @@ func _run() -> void:
 	await _test_sentry()
 	_test_defib()
 	_test_fall_damage()
+	_test_damage_immunity()
 
 	print("")
 	print("%d passed, %d failed" % [_passed, _failed])

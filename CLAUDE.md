@@ -25,7 +25,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `core/dot_hitbox.gd`, `dot_hitbox_set.gd`, `dot_hit_group.gd` | analytic capsule, box and sphere hitboxes; tie-break by precedence |
 | `core/dot_health.gd`, `dot_damage.gd`, `dot_damage_type.gd` | health and armour, the damage event, falloff |
 | `trace/` | `DotTrace` (world ray plus hitboxes), `DotTracePhysics` (world via the physics server), `DotTraceFlat` (analytic boxes and a ground plane) |
-| `resolve/` | `DotDamageResolver`, `DotDamageRules`: teams, friendly fire, falloff, criticals |
+| `resolve/` | `DotDamageResolver`, `DotDamageRules`: teams, friendly fire, falloff, criticals; `DotDamageImmunity` (per-entity damage kinds ignored, set from a class profile, none by default) |
 | `net/dot_combat_net_sync.gd` | `DotCombatNetSync`: health, armour and alive as data specs |
 | `dot_combat_manager.gd` | `DotCombatManager`: trace, rewind, resolve, apply |
 | `dot_combat_config.gd` | `DotCombatConfig`: rate limits, `max_origin_error`, lag compensation |
