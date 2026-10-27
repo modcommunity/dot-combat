@@ -886,6 +886,11 @@ func explode(
 	return out
 
 
+## The entity id registered for the node a hit reported (a hitbox's owner), 0 when none.
+func entity_id_of(node: Node) -> int:
+	return _entity_id_of(node)
+
+
 func _entity_id_of(node: Node) -> int:
 	if node == null:
 		return 0
