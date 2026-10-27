@@ -19,6 +19,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | --- | --- |
 | `core/dot_shot.gd` | `DotShot`: a shot that describes itself (damage, type, range, pellets, splash, `deferred`) |
 | `core/dot_sentry.gd` | `DotSentry`: a deployed turret as data; `step(delta, now, candidates, can_see)` says when and where it fires, `find_spot` is the placement check (floor, slope, headroom, room); the game applies damage and draws it |
+| `core/dot_fall_damage.gd`, `dot_fall_damage_rules.gd` | `DotFallDamage` (per player: a controller's `landed(impact)` becomes `apply_damage`, authority only) and `DotFallDamageRules` (`sv_falldamage`, `_threshold`, `_scale`; off by default; water and soft surfaces ignored) |
 | `core/dot_defib.gd` | `DotDefib`: a defibrillator as data (charges, cooldown, reach, charge time, revive share, body-age limit); `check(now, body_age, distance)` says why a try refuses, the game owns the hold, the body and the revive |
 | `core/dot_spread.gd` | `DotSpread`: deterministic scatter over dot-core's `DotRandomStream` |
 | `core/dot_hitbox.gd`, `dot_hitbox_set.gd`, `dot_hit_group.gd` | analytic capsule, box and sphere hitboxes; tie-break by precedence |

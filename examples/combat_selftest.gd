@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 227
+const CHECKS := 246
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 21
+const SECTIONS := 22
 
 
 func _ready() -> void:
@@ -53,6 +53,7 @@ func _run() -> void:
 	_test_limbs()
 	await _test_sentry()
 	_test_defib()
+	_test_fall_damage()
 
 	print("")
 	print("%d passed, %d failed" % [_passed, _failed])
@@ -1489,3 +1490,83 @@ class _TaggedSink extends _LimbSink:
 	func hit_limb(limb: StringName, point: Vector3, amount: float, impulse: Vector3) -> StringName:
 		limb_calls.append([limb, point, amount, impulse])
 		return &""
+
+
+class FakeController extends Node:
+	signal landed(impact: float)
+	var state := FakeState.new()
+
+
+class FakeState extends RefCounted:
+	var surface: StringName = &""
+
+
+func _test_fall_damage() -> void:
+	_section("fall damage: threshold, curve, water, soft surface, cvars, authority")
+
+	var rules := DotFallDamageRules.new()
+	_check(rules.damage_for(40.0) == 0.0, "off by default: a huge fall does nothing")
+	rules.enabled = true
+	rules.threshold = 10.0
+	rules.scale = 2.0
+	_check(rules.damage_for(10.0) == 0.0, "at the threshold: none")
+	_check(rules.damage_for(4.0) == 0.0, "below the threshold: none")
+	_close(rules.damage_for(15.0), 10.0, "above it: scale times the excess")
+	_close(rules.damage_for(20.0), 20.0, "twice the excess, twice the damage (linear)")
+	rules.curve_power = 2.0
+	_close(rules.damage_for(20.0), 200.0, "a power curve punishes a long fall more")
+	rules.max_damage = 50.0
+	_close(rules.damage_for(20.0), 50.0, "capped")
+	rules.curve_power = 1.0
+	rules.max_damage = 0.0
+	_check(rules.damage_for(20.0, &"", true) == 0.0, "water landing: none")
+	rules.soft_surfaces = [&"snow"]
+	_check(rules.damage_for(20.0, &"snow") == 0.0, "soft surface: none")
+	_check(rules.damage_for(20.0, &"concrete") > 0.0, "another surface still hurts")
+
+	var held := DotFallDamageRules.new()
+	var made := held.bind_cvars(func(n: String, v: String, _d: String, f: int) -> Object:
+		var cv := FakeCvar.new()
+		cv.cvar_name = n
+		cv.value = "1" if n == DotFallDamageRules.CVAR_ENABLED else v
+		cv.flags = f
+		return cv)
+	_check(made.size() == 3 and held.enabled, "three cvars; a value set before binding is read back")
+	made[0].set_value("0")
+	_check(not held.enabled, "sv_falldamage 0 turns it off live")
+	made[1].set_value("8")
+	_close(held.threshold, 8.0, "sv_falldamage_threshold is live")
+	_check(not held.set_cvar(DotFallDamageRules.CVAR_SCALE, "lots"), "a non-number is refused")
+
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), DotDamageRules.new())
+	var health := DotHealth.new()
+	health.max_health = 100.0
+	health.health = 100.0
+	add_child(health)
+	manager.register_health(7, health)
+	var ctl := FakeController.new()
+	ctl.name = "Ctl"
+	add_child(ctl)
+	var fall := DotFallDamage.new()
+	fall.rules = rules
+	fall.rules.enabled = true
+	fall.victim = 7
+	fall.controller = DotNodeRef.of_path(ctl.get_path())
+	fall.combat = DotNodeRef.of_path(manager.get_path())
+	fall.controller.mode = DotNodeRef.Mode.ABSOLUTE
+	fall.combat.mode = DotNodeRef.Mode.ABSOLUTE
+	add_child(fall)
+	_check(fall.describe()["attached"], "the node refs resolved and it attached")
+
+	ctl.landed.emit(5.0)
+	_close(health.health, 100.0, "a soft landing through the signal: no damage")
+	ctl.landed.emit(15.0)
+	_close(health.health, 90.0, "a hard landing through the signal hurts via the manager")
+	rules.enabled = false
+	ctl.landed.emit(30.0)
+	_close(health.health, 90.0, "cvar off: no damage")
+	rules.enabled = true
+	manager.is_authority = false
+	ctl.landed.emit(30.0)
+	_close(health.health, 90.0, "not the authority (a client or a replay): no damage")
+	_done()
