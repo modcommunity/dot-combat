@@ -14,7 +14,7 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 246
+const CHECKS := 261
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -1495,6 +1495,18 @@ class _TaggedSink extends _LimbSink:
 class FakeController extends Node:
 	signal landed(impact: float)
 	var state := FakeState.new()
+	var surfaces: Object = null
+
+
+class FakeSurface extends RefCounted:
+	var fall_damping: float = 0.0
+
+
+class FakeSurfaceSet extends RefCounted:
+	var found: FakeSurface = null
+
+	func get_surface(_id: StringName) -> FakeSurface:
+		return found
 
 
 class FakeState extends RefCounted:
@@ -1531,7 +1543,7 @@ func _test_fall_damage() -> void:
 		cv.value = "1" if n == DotFallDamageRules.CVAR_ENABLED else v
 		cv.flags = f
 		return cv)
-	_check(made.size() == 3 and held.enabled, "three cvars; a value set before binding is read back")
+	_check(made.size() == 13 and held.enabled, "thirteen cvars; a value set before binding is read back")
 	made[0].set_value("0")
 	_check(not held.enabled, "sv_falldamage 0 turns it off live")
 	made[1].set_value("8")
@@ -1569,4 +1581,50 @@ func _test_fall_damage() -> void:
 	manager.is_authority = false
 	ctl.landed.emit(30.0)
 	_close(health.health, 90.0, "not the authority (a client or a replay): no damage")
+	manager.is_authority = true
+
+	rules.lethal_speed = 30.0
+	_close(rules.damage_for(29.0), 38.0, "just under the lethal speed it is the curve")
+	_check(rules.damage_for(30.0) >= 1000.0, "at the lethal speed it kills")
+	_check(held.set_cvar(DotFallDamageRules.CVAR_LETHAL, "25") and held.lethal_speed == 25.0, "sv_falldamage_lethal is live")
+	_check(held.set_cvar(DotFallDamageRules.CVAR_POWER, "2") and held.curve_power == 2.0, "sv_falldamage_power is live")
+	_check(held.set_cvar(DotFallDamageRules.CVAR_MAX, "40") and held.max_damage == 40.0, "sv_falldamage_max is live")
+	_check(held.set_cvar("sv_falldamage_absorb_ladder", "0") and not held.absorbs[&"ladder"], "an absorb cvar turns one off")
+	_check(not held.set_cvar("sv_falldamage_absorb_weather", "1"), "an unknown absorb context is refused")
+
+	rules.lethal_speed = 0.0
+	_check(rules.damage_for(20.0, &"", false, [&"ladder"]) == 0.0, "landing off a ladder absorbs by default")
+	rules.absorbs[&"ladder"] = false
+	_check(rules.damage_for(20.0, &"", false, [&"ladder"]) > 0.0, "a ladder that does not absorb hurts")
+	_check(rules.damage_for(20.0, &"", false, [&"protected"]) == 0.0, "spawn protection absorbs")
+
+	var flag := [false]
+	fall.context_checks[&"noclip"] = func() -> bool: return flag[0]
+	health.health = 100.0
+	flag[0] = true
+	ctl.landed.emit(30.0)
+	_close(health.health, 100.0, "a host context that absorbs (noclip) means no damage")
+	flag[0] = false
+
+	var soft := FakeSurface.new()
+	soft.fall_damping = 0.5
+	var set := FakeSurfaceSet.new()
+	set.found = soft
+	ctl.surfaces = set
+	ctl.state.surface = &"mattress"
+	ctl.landed.emit(15.0)
+	_close(health.health, 95.0, "a surface that damps a fall by half halves it")
+	soft.fall_damping = 1.0
+	ctl.landed.emit(30.0)
+	_close(health.health, 95.0, "a surface that fully absorbs a fall does no damage")
+	ctl.state.surface = &""
+
+	rules.legs_seconds = 3.0
+	rules.legs_speed = 0.5
+	var got: Array = []
+	fall.legs_broken.connect(func(sec: float, sc: float) -> void: got.append([sec, sc]))
+	ctl.landed.emit(15.0)
+	_check(got.size() == 1 and got[0][0] == 3.0 and got[0][1] == 0.5, "a damaging landing breaks the legs when the cvar says so")
+	ctl.landed.emit(2.0)
+	_check(got.size() == 1, "a soft landing leaves the legs alone")
 	_done()
