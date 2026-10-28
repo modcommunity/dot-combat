@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 261
+const CHECKS := 270
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 22
+const SECTIONS := 23
 
 
 func _ready() -> void:

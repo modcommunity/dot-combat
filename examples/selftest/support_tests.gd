@@ -156,3 +156,4 @@ func _test_damage_immunity() -> void:
 	_check(blocked.refused and blocked.refusal.contains("immune"), "an immune victim refuses that kind")
 	_check(not res.resolve(DotDamage.make(0, 5, 30.0, bullet)).refused, "the same victim still takes another kind")
 	_check(not res.resolve(DotDamage.make(0, 6, 30.0, fall)).refused, "another victim still takes it")
+	_done()
