@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 270
+const CHECKS := 275
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 23
+const SECTIONS := 24
 
 
 func _ready() -> void:
@@ -51,6 +51,7 @@ func _run() -> void:
 	_test_lag_compensation()
 	_test_net_sync()
 	_test_limbs()
+	_test_freed_hitbox()
 	await _test_sentry()
 	_test_defib()
 	_test_fall_damage()
@@ -1628,4 +1629,50 @@ func _test_fall_damage() -> void:
 	_check(got.size() == 1 and got[0][0] == 3.0 and got[0][1] == 0.5, "a damaging landing breaks the legs when the cvar says so")
 	ctl.landed.emit(2.0)
 	_check(got.size() == 1, "a soft landing leaves the legs alone")
+	_done()
+
+
+## An engine error is the only symptom of a freed box still in a set's list: the query
+## carries on with the survivors, so a value assertion alone passes unguarded.
+class ErrorCatcher extends Logger:
+	var errors: Array[String] = []
+
+	func _log_error(function: String, _file: String, _line: int, code: String,
+			rationale: String, _editor_notify: bool, _error_type: int,
+			_script_backtraces: Array) -> void:
+		errors.append("%s %s %s" % [code, rationale, function])
+
+
+func _test_freed_hitbox() -> void:
+	_section("a hitbox freed under a registered set")
+
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -10.0), 1000.0)
+	var set_node := _hitboxes_of(victim)
+	set_node.register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var legs: Node = set_node.hitboxes()[2]
+	legs.free()
+
+	var catcher := ErrorCatcher.new()
+	OS.add_logger(catcher)
+	var shot := _rifle_shot(1, 200, 1)
+	shot.origin = Vector3(0.0, 1.62, 0.0)
+	shot.direction = Vector3.FORWARD
+	shot.scatter()
+	manager.resolve_shot(shot)
+	var ray_hit := set_node.intersect_ray(Vector3(0.0, 1.62, 0.0), Vector3.FORWARD, 100.0)
+	var near := set_node.overlaps_sphere(Vector3(0.0, 1.62, -10.0), 0.5)
+	var inside := set_node.contains_point(Vector3(0.0, 1.0, -10.0))
+	var closest := set_node.closest_point(Vector3(0.0, 0.0, -9.0))
+	var described: Dictionary = set_node.describe()
+	OS.remove_logger(catcher)
+
+	_check(shot.damages.size() == 1 and ray_hit.ok(), "a shot still hits the boxes that remain")
+	_check(near and inside, "overlap and containment still see the survivors")
+	_check(closest.is_finite() and int(described["count"]) == 2, "closest point and describe skip the freed box", str(described["count"]))
+	_check(set_node.hitboxes().size() == 2, "the list drops the freed box", str(set_node.hitboxes().size()))
+	_check(catcher.errors.is_empty(), "and none of that raised an engine error", str(catcher.errors))
+
 	_done()

@@ -73,7 +73,16 @@ func _collect(node: Node) -> void:
 
 
 func hitboxes() -> Array[DotHitbox]:
+	_prune()
 	return _hitboxes
+
+
+## A box freed under the set is not announced; dropping it here keeps every query off it.
+func _prune() -> void:
+	for box in _hitboxes:
+		if not is_instance_valid(box):
+			_hitboxes.assign(_hitboxes.filter(is_instance_valid))
+			return
 
 
 func entity_owner() -> Node:
@@ -119,6 +128,7 @@ func intersect_ray(
 	direction: Vector3,
 	max_distance: float
 ) -> DotHitbox.Hit:
+	_prune()
 	var miss := DotHitbox.Hit.new()
 
 	if not enabled or _hitboxes.is_empty():
@@ -156,6 +166,7 @@ func intersect_ray(
 
 ## Whether any hitbox overlaps a sphere. What splash damage tests against.
 func overlaps_sphere(centre: Vector3, radius: float) -> bool:
+	_prune()
 	if not enabled:
 		return false
 
@@ -175,6 +186,7 @@ func overlaps_sphere(centre: Vector3, radius: float) -> bool:
 ## starts inside a hitbox hits it at distance zero (see [DotHitbox]), so "does this body
 ## hold the muzzle" is the question that decides whether a shot can see past it at all.
 func contains_point(point: Vector3) -> bool:
+	_prune()
 	if not enabled:
 		return false
 
@@ -194,6 +206,7 @@ func contains_point(point: Vector3) -> bool:
 ## feet is not measured to the middle of their chest — the difference is most of a
 ## body's worth of falloff.
 func closest_point(point: Vector3) -> Vector3:
+	_prune()
 	var best := bounds_centre()
 	var best_distance := INF
 
@@ -212,6 +225,7 @@ func closest_point(point: Vector3) -> Vector3:
 ## Whether a ray could hit anything of this set: enabled, has hitboxes, crosses the bounds.
 ## [method intersect_ray] misses whenever this is false, and this allocates nothing.
 func may_be_hit(from: Vector3, direction: Vector3, max_distance: float) -> bool:
+	_prune()
 	return enabled and not _hitboxes.is_empty() and _ray_hits_bounds(from, direction, max_distance)
 
 
@@ -243,6 +257,7 @@ func _ray_hits_bounds(
 
 
 func describe() -> Dictionary:
+	_prune()
 	var boxes := []
 	for box in _hitboxes:
 		boxes.append(box.describe())
