@@ -134,11 +134,7 @@ func _fall_curve_checks() -> DotFallDamageRules:
 	return rules
 
 
-func _test_fall_damage() -> void:
-	_section("fall damage: threshold, curve, water, soft surface, cvars, authority")
-
-	var rules := _fall_curve_checks()
-
+func _fall_cvar_checks() -> DotFallDamageRules:
 	var held := DotFallDamageRules.new()
 	var made := held.bind_cvars(func(n: String, v: String, _d: String, f: int) -> Object:
 		var cv := FakeCvar.new()
@@ -152,6 +148,39 @@ func _test_fall_damage() -> void:
 	made[1].set_value("8")
 	_close(held.threshold, 8.0, "sv_falldamage_threshold is live")
 	_check(not held.set_cvar(DotFallDamageRules.CVAR_SCALE, "lots"), "a non-number is refused")
+	return held
+
+
+func _fall_surface_and_legs(rules: DotFallDamageRules, fall: DotFallDamage, ctl: FakeController, health: DotHealth) -> void:
+	var soft := FakeSurface.new()
+	soft.fall_damping = 0.5
+	var set := FakeSurfaceSet.new()
+	set.found = soft
+	ctl.surfaces = set
+	ctl.state.surface = &"mattress"
+	ctl.landed.emit(15.0)
+	_close(health.health, 95.0, "a surface that damps a fall by half halves it")
+	soft.fall_damping = 1.0
+	ctl.landed.emit(30.0)
+	_close(health.health, 95.0, "a surface that fully absorbs a fall does no damage")
+	ctl.state.surface = &""
+
+	rules.legs_seconds = 3.0
+	rules.legs_speed = 0.5
+	var got: Array = []
+	fall.legs_broken.connect(func(sec: float, sc: float) -> void: got.append([sec, sc]))
+	ctl.landed.emit(15.0)
+	_check(got.size() == 1 and got[0][0] == 3.0 and got[0][1] == 0.5, "a damaging landing breaks the legs when the cvar says so")
+	ctl.landed.emit(2.0)
+	_check(got.size() == 1, "a soft landing leaves the legs alone")
+
+
+func _test_fall_damage() -> void:
+	_section("fall damage: threshold, curve, water, soft surface, cvars, authority")
+
+	var rules := _fall_curve_checks()
+
+	var held := _fall_cvar_checks()
 
 	var manager := _make_manager(DotTraceFlat.with_floor(0.0), DotDamageRules.new())
 	var health := DotHealth.new()
@@ -209,27 +238,7 @@ func _test_fall_damage() -> void:
 	_close(health.health, 100.0, "a host context that absorbs (noclip) means no damage")
 	flag[0] = false
 
-	var soft := FakeSurface.new()
-	soft.fall_damping = 0.5
-	var set := FakeSurfaceSet.new()
-	set.found = soft
-	ctl.surfaces = set
-	ctl.state.surface = &"mattress"
-	ctl.landed.emit(15.0)
-	_close(health.health, 95.0, "a surface that damps a fall by half halves it")
-	soft.fall_damping = 1.0
-	ctl.landed.emit(30.0)
-	_close(health.health, 95.0, "a surface that fully absorbs a fall does no damage")
-	ctl.state.surface = &""
-
-	rules.legs_seconds = 3.0
-	rules.legs_speed = 0.5
-	var got: Array = []
-	fall.legs_broken.connect(func(sec: float, sc: float) -> void: got.append([sec, sc]))
-	ctl.landed.emit(15.0)
-	_check(got.size() == 1 and got[0][0] == 3.0 and got[0][1] == 0.5, "a damaging landing breaks the legs when the cvar says so")
-	ctl.landed.emit(2.0)
-	_check(got.size() == 1, "a soft landing leaves the legs alone")
+	_fall_surface_and_legs(rules, fall, ctl, health)
 	_done()
 
 
