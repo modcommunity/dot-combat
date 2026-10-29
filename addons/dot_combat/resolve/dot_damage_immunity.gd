@@ -2,10 +2,7 @@ class_name DotDamageImmunity
 extends RefCounted
 
 ## Which damage kinds each entity ignores, by [member DotDamageType.id].
-##
-## Data, not a rule: a class or profile says "immune to fall and fire" and a bridge writes
-## it here once per spawn. Empty by default, so a game that never sets one changes nothing.
-## The wildcard kind [constant ALL] covers every kind.
+## Data a bridge writes once per spawn from a class profile; empty by default. The wildcard [constant ALL] covers every kind.
 
 const ALL := &"all"
 

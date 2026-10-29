@@ -1,4 +1,4 @@
-extends "res://examples/selftest/selftest_base.gd"
+extends "res://examples/selftest/damage_tests.gd"
 
 ## The defibrillator, sentry and damage immunity sections.
 
@@ -25,9 +25,7 @@ func _test_defib() -> void:
 	_done()
 
 
-func _test_sentry() -> void:
-	_section("sentry")
-
+func _sentry_step_checks() -> void:
 	var sentry := DotSentry.new(Vector3.ZERO, 0.0)
 	sentry.interval = 0.5
 	sentry.lifetime = 10.0
@@ -76,6 +74,12 @@ func _test_sentry() -> void:
 	timed.lifetime = 10.0
 	_check(not timed.expired(14.0) and timed.expired(15.0), "a lifetime runs from its birth")
 	_close(timed.seconds_left(12.0), 3.0, "and counts down")
+
+
+func _test_sentry() -> void:
+	_section("sentry")
+
+	_sentry_step_checks()
 
 	# Placement against a real floor, a wall and a low ceiling.
 	var floor_body := StaticBody3D.new()

@@ -1,9 +1,7 @@
 class_name DotFallDamageRules
 extends RefCounted
 ## The numbers of fall damage, shared by every [DotFallDamage] in a game, as three server cvars.
-##
-## Off by default: a game opts in by setting [member enabled] or its cvar. Pure functions
-## ([method damage_for]) so a selftest and the server agree without a scene.
+## Off by default. Pure functions ([method damage_for]) so a selftest and the server agree without a scene.
 
 signal changed
 

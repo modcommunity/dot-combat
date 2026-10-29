@@ -499,15 +499,8 @@ func _trace_shot(shot: DotShot) -> void:
 ## The hitbox sets [param shot] passes through: a team-mate's that already holds its muzzle
 ## and, under [member DotDamageRules.pass_through_team_mates], every team-mate's.
 ##
-## [b]Why the manager and not the trace or the hitbox.[/b] [DotHitbox] counting a ray that
-## starts inside it as a hit at zero is right on its own terms (a point-blank shot on an
-## enemy), and [DotTrace] knows geometry but not teams. Only here are the attacker, the
-## victim's id and the resolver's [code]team_of[/code] all in hand, so this is the one place
-## the rule can be written once for every game instead of in each game's trace subclass.
-##
-## Public for anything else that traces a shot outside [method resolve_shot] (a client's
-## hit marker, a bot's "is a friend in my line" check): pass the result as
-## [member DotTrace.exclude] alongside the shooter, or skip these sets yourself.
+## Lives here, not in the trace or hitbox: only the manager has the attacker, the victim's id and the resolver's team_of together.
+## Public for anything tracing outside [method resolve_shot]: pass the result as [member DotTrace.exclude] alongside the shooter.
 func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 	var out: Array[DotHitboxSet] = []
 
@@ -515,9 +508,7 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 		return out
 
 	var use_rule := rules != null and rules.pass_through_team_mate_at_muzzle
-	# The broad rule (every team-mate in the line) is asked of the resolver whatever
-	# pass_through_fn says: that callable replaces the muzzle question only, and an operator
-	# who set mp_teammate_passthrough 2 meant it for every body a game's callable lets stand.
+	# The broad rule goes to the resolver whatever pass_through_fn says: that callable replaces the muzzle question only.
 	var everywhere := rules != null and rules.pass_through_team_mates and resolver != null
 
 	if not pass_through_fn.is_valid() and not everywhere and (not use_rule or resolver == null):

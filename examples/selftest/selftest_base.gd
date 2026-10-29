@@ -79,8 +79,6 @@ func _group(title: String) -> void:
 	print("%s" % title)
 
 
-# --- Fixtures --------------------------------------------------------------
-
 func _bullet() -> DotDamageType:
 	var type := DotDamageType.make(&"bullet", "Bullet")
 	type.armour_share = 0.5
@@ -92,10 +90,7 @@ func _bullet() -> DotDamageType:
 
 
 ## A rifle shot, ready to resolve.
-##
-## A [DotShot] rather than a weapon: dot-combat no longer knows what a weapon is, and
-## a shot now carries the six numbers the resolver actually needs. dot-weapon's suite
-## covers the half that decides a shot happened.
+## A [DotShot], not a weapon: this addon does not know what a weapon is.
 func _rifle_shot(attacker: int, tick: int, index: int) -> DotShot:
 	var shot := DotShot.make(&"rifle", attacker, tick, index)
 	shot.damage = 25.0
@@ -120,9 +115,7 @@ func _rocket_shot(type: DotDamageType, attacker: int, tick: int, index: int) -> 
 
 
 ## A player: a body node with a [DotHealth] and a [DotHitboxSet] of three hitboxes.
-##
-## Built by hand rather than from a scene so the whole fixture is visible here — a
-## self-test whose fixture is a .tscn is a self-test nobody can read.
+## Built by hand so the whole fixture is readable here.
 func _make_player(position: Vector3, max_health: float = 100.0) -> Node3D:
 	var body := Node3D.new()
 	body.position = position
@@ -188,3 +181,14 @@ func _clear_players() -> void:
 			body.queue_free()
 			remove_child(body)
 	_players.clear()
+
+
+func _make_manager(trace: DotTrace, rules: DotDamageRules) -> DotCombatManager:
+	var manager := DotCombatManager.new()
+	manager.register_service = false
+	manager.trace = trace
+	manager.rules = rules
+	manager.config = DotCombatConfig.new()
+	manager.config.tick_rate = 60
+	add_child(manager)
+	return manager

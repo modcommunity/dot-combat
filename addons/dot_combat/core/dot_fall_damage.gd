@@ -1,12 +1,7 @@
 class_name DotFallDamage
 extends Node
-## Turns a controller's landing impact into damage through the combat manager.
-##
-## One per player. [member controller] is anything with a [code]landed(impact)[/code] signal
-## (dot-player-controller's DotFpsController; duck-typed, this addon names no other addon).
-## Damage goes through [method DotCombatManager.apply_damage], which applies only on the
-## authority, so a client (including a prediction replay of the same landing) never hurts
-## anyone; the server's health reaches clients the usual way.
+## Turns a controller's landing impact (any node with a [code]landed(impact)[/code] signal) into damage; one per player.
+## Goes through [method DotCombatManager.apply_damage], which applies only on the authority, so a client never hurts anyone.
 
 const CHANNEL := "combat.fall"
 
