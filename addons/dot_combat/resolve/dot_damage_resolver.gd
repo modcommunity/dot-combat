@@ -70,7 +70,7 @@ func resolve(damage: DotDamage) -> DotDamage:
 			damage.refuse("self damage is off")
 			return damage
 		damage.scale_by(type.self_scale, "self")
-	elif _same_team(damage.attacker, damage.victim):
+	elif not damage.context.get(&"ignores_teams", false) and _same_team(damage.attacker, damage.victim):
 		if not rules.friendly_fire:
 			damage.refuse("friendly fire is off")
 			return damage

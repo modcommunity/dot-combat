@@ -175,6 +175,42 @@ func _fall_surface_and_legs(rules: DotFallDamageRules, fall: DotFallDamage, ctl:
 	_check(got.size() == 1, "a soft landing leaves the legs alone")
 
 
+func _test_stomp() -> void:
+	_section("stomp: head test, speed floor, teams, cooldown, cvars")
+
+	var stomp := DotStomp.new()
+	var hulls: Array = [{"id": 2, "feet": Vector3(0, 0, 0), "height": 1.8, "radius": 0.35, "team": 1}]
+	var on_head := Vector3(0.2, 1.9, 0)
+	_check(stomp.find(1, on_head, 0.35, 12.0, 0, hulls, 10, 60) == 0, "off by default: nobody is stomped")
+	stomp.rules.enabled = true
+	_check(stomp.find(1, on_head, 0.35, 12.0, 0, hulls, 10, 60) == 2, "a fast landing on a head stomps")
+	_check(stomp.find(1, on_head, 0.35, 12.0, 0, hulls, 11, 60) == 0, "the cooldown blocks the next tick")
+	_check(stomp.find(1, on_head, 0.35, 12.0, 0, hulls, 100, 60) == 2, "and lets go after its seconds")
+	_check(stomp.find(3, on_head, 0.35, 2.0, 0, hulls, 10, 60) == 0, "below the minimum speed: nothing")
+	_check(stomp.find(3, Vector3(0, 3.0, 0), 0.35, 12.0, 0, hulls, 10, 60) == 0, "well above the head: nothing")
+	_check(stomp.find(3, Vector3(2.0, 1.9, 0), 0.35, 12.0, 0, hulls, 10, 60) == 0, "beside the head: nothing")
+	_check(stomp.find(2, Vector3(0, 1.9, 0), 0.35, 12.0, 0, hulls, 10, 60) == 0, "never yourself")
+	_check(stomp.find(4, on_head, 0.35, 12.0, 1, hulls, 10, 60) == 0, "a teammate is safe by default")
+	stomp.rules.same_team = true
+	_check(stomp.find(5, on_head, 0.35, 12.0, 1, hulls, 10, 60) == 2, "unless the rules allow same-team stomps")
+	_close(stomp.amount(), DotStomp.LETHAL_DAMAGE, "a stomp kills outright by default")
+	stomp.rules.damage = 30.0
+	_close(stomp.amount(), 30.0, "or takes the amount the rules name")
+
+	var rules := DotStompRules.new()
+	var made := rules.bind_cvars(func(n: String, v: String, _d: String, f: int) -> Object:
+		var cv := FakeCvar.new()
+		cv.cvar_name = n
+		cv.value = "1" if n == "sv_stomp" else v
+		cv.flags = f
+		return cv)
+	_check(made.size() == 7 and rules.enabled, "seven cvars; sv_stomp set before binding is read back")
+	made[0].set_value("0")
+	_check(not rules.enabled, "sv_stomp 0 turns it off live")
+	_check(not rules.set_cvar("sv_stomp_bounce", "lots"), "a non-number is refused")
+	_done()
+
+
 func _test_fall_damage() -> void:
 	_section("fall damage: threshold, curve, water, soft surface, cvars, authority")
 
