@@ -64,9 +64,11 @@ func _test_limbs() -> void:
 
 	manager.limb_min_damage = {}
 	_check(is_zero_approx(manager.limb_threshold(&"head")), "no thresholds means every tagged hit counts")
-	_check(DotHitbox.new().limb == &"", "an untagged hitbox has no limb")
+	var untagged := DotHitbox.new()
+	_check(untagged.limb == &"", "an untagged hitbox has no limb")
 	_check(sink.calls.size() == 2, "the sink saw exactly the counted hits")
-	_check(DotHitbox.new().describe().has("limb"), "describe names the limb")
+	_check(untagged.describe().has("limb"), "describe names the limb")
+	untagged.free()
 
 	manager.queue_free()
 	remove_child(manager)
