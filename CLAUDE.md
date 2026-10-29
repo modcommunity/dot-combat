@@ -23,6 +23,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `core/dot_defib.gd` | `DotDefib`: a defibrillator as data (charges, cooldown, reach, charge time, revive share, body-age limit); `check(now, body_age, distance)` says why a try refuses, the game owns the hold, the body and the revive |
 | `core/dot_spread.gd` | `DotSpread`: deterministic scatter over dot-core's `DotRandomStream` |
 | `core/dot_hitbox.gd`, `dot_hitbox_set.gd`, `dot_hit_group.gd` | analytic capsule, box and sphere hitboxes; tie-break by precedence |
+| `core/dot_stomp.gd`, `dot_stomp_rules.gd` | `DotStomp` (pure head-landing detector: fall speed, head gap, reach, cooldown, team) and `DotStompRules` (`sv_stomp*` cvars; off by default; the game applies the damage and bounce, with `context.ignores_teams` for same-team) |
 | `core/dot_health.gd`, `dot_damage.gd`, `dot_damage_type.gd` | health and armour, the damage event, falloff |
 | `trace/` | `DotTrace` (world ray plus hitboxes), `DotTracePhysics` (world via the physics server), `DotTraceFlat` (analytic boxes and a ground plane) |
 | `resolve/` | `DotDamageResolver`, `DotDamageRules`: teams, friendly fire, falloff, criticals; `DotDamageImmunity` (per-entity damage kinds ignored, set from a class profile, none by default) |
