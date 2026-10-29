@@ -55,6 +55,7 @@ func find(attacker: int, feet: Vector3, radius: float, fall_speed: float, attack
 	if best != 0:
 		_last_tick[attacker] = tick
 		stomps += 1
+		DotLog.debug(CHANNEL, "stomp", {"attacker": attacker, "victim": best, "fall_speed": fall_speed})
 
 	return best
 

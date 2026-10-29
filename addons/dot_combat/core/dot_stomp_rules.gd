@@ -3,7 +3,6 @@ extends RefCounted
 ## The numbers of the head stomp (landing on a player's head hurts them), as [code]sv_stomp_*[/code] cvars.
 ## Off by default. Pure data, so a selftest and the server agree without a scene.
 
-const CHANNEL := "combat.stomp"
 const CVARS: Dictionary = {
 	"sv_stomp": ["enabled", 0.0, 1.0, "Landing on a player's head hurts them: 0 off, 1 on"],
 	"sv_stomp_damage": ["damage", 0.0, 100000.0, "Health a stomp takes; 0 kills outright"],
