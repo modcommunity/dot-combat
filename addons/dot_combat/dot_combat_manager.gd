@@ -557,6 +557,9 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 ## anybody), 1 at the muzzle (the default), 2 always (team-mates never block a shot).
 const CVAR_TEAMMATE_PASSTHROUGH := "mp_teammate_passthrough"
 
+## 1 lets a shooter damage a team-mate, 0 refuses it. The default is whatever the game's [member rules] say when the cvar binds, so binding it changes no game's behaviour until an operator sets it.
+const CVAR_FRIENDLY_FIRE := "mp_friendlyfire"
+
 
 ## The cvars [method bind_cvars] registers, as data, for a host that registers them its own way.
 func cvar_specs() -> Array[Dictionary]:
@@ -568,6 +571,13 @@ func cvar_specs() -> Array[Dictionary]:
 			"description": "Shots and team-mates: 0 a team-mate is hit and blocks the shot, 1 a shot passes through a team-mate standing at the muzzle, 2 shots pass through every team-mate in the line",
 			"min": float(DotDamageRules.PASS_THROUGH_NONE),
 			"max": float(DotDamageRules.PASS_THROUGH_ALWAYS),
+		},
+		{
+			"name": CVAR_FRIENDLY_FIRE,
+			"value": "1" if rules != null and rules.friendly_fire else "0",
+			"description": "Friendly fire: 1 a shooter can damage a team-mate, 0 team-mates are immune to each other",
+			"min": 0.0,
+			"max": 1.0,
 		},
 	]
 	return out
@@ -623,10 +633,12 @@ func bind_cvars(add: Callable, flags: int = 0) -> Array:
 ## Applies one of [method cvar_specs]' cvars by name. Returns false for a name that is not
 ## this manager's or a value that is not a number.
 func set_cvar(cvar_name: String, value: String) -> bool:
-	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH:
+	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH and cvar_name != CVAR_FRIENDLY_FIRE:
 		return false
 
-	var text := value.strip_edges()
+	var text := value.strip_edges().to_lower()
+	if cvar_name == CVAR_FRIENDLY_FIRE and text in ["true", "false"]:
+		text = "1" if text == "true" else "0"
 
 	if not text.is_valid_float():
 		DotLog.warn(CHANNEL, "cvar is not a number; left as it was", {"cvar": cvar_name, "value": value})
@@ -634,6 +646,13 @@ func set_cvar(cvar_name: String, value: String) -> bool:
 
 	if rules == null:
 		rules = DotDamageRules.new()
+
+	if cvar_name == CVAR_FRIENDLY_FIRE:
+		rules.friendly_fire = text.to_float() != 0.0
+		if resolver != null and resolver.rules != null and resolver.rules != rules:
+			resolver.rules.friendly_fire = rules.friendly_fire
+		DotLog.debug(CHANNEL, "friendly fire set", {"on": rules.friendly_fire})
+		return true
 
 	rules.set_pass_through_level(roundi(text.to_float()))
 

@@ -887,7 +887,7 @@ func _test_team_mate_pass_through_cvar() -> void:
 		return cv
 	var bound := manager.bind_cvars(add, 9)
 	_check(
-		bound.size() == 1 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
+		bound.size() == 2 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
 		"bind_cvars registers mp_teammate_passthrough with the caller's flags",
 		str(made.map(func(c: FakeCvar) -> String: return c.cvar_name))
 	)
