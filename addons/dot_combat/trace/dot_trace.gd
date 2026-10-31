@@ -24,6 +24,13 @@ var exclude: Array = []
 ## Bodies the world query ignores, for backends that have RIDs.
 var exclude_rids: Array[RID] = []
 
+## Told of every ray: [code]call(from, direction, distance)[/code], [param distance] being the nearest hit or the full range.
+## What lets dropped weapons be shot without the trace knowing about them.
+var ray_observer: Callable = Callable()
+
+## Told of every splash query: [code]call(centre, radius)[/code].
+var sphere_observer: Callable = Callable()
+
 
 ## The world-geometry hit, or a miss. Override this and nothing else.
 ##
@@ -94,6 +101,8 @@ func ray(
 		best = hit
 		limit = hit.distance
 
+	if ray_observer.is_valid():
+		ray_observer.call(from, direction, best.distance if best.ok() else max_distance)
 	return best
 
 
@@ -124,6 +133,8 @@ func sphere_overlap(
 	sets: Array[DotHitboxSet] = [],
 	require_line_of_sight: bool = true
 ) -> Array[DotHitboxSet]:
+	if sphere_observer.is_valid():
+		sphere_observer.call(centre, radius)
 	var found: Array[DotHitboxSet] = []
 	var distances: Array[float] = []
 
