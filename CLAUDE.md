@@ -26,6 +26,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `core/dot_hitbox.gd`, `dot_hitbox_set.gd`, `dot_hit_group.gd` | analytic capsule, box and sphere hitboxes; tie-break by precedence |
 | `core/dot_stomp.gd`, `dot_stomp_rules.gd` | `DotStomp` (pure head-landing detector: fall speed, head gap, reach, cooldown, team) and `DotStompRules` (`sv_stomp*` cvars; off by default; the game applies the damage and bounce, with `context.ignores_teams` for same-team) |
 | `core/dot_health.gd`, `dot_damage.gd`, `dot_damage_type.gd` | health and armour, the damage event, falloff |
+| `core/dot_penetration.gd`, `_trace_pellet` in the manager | a shot's `DotPenetration` (power, per-material resistance, body cost per hit group): a pellet crosses walls (exit found by a reverse world ray, `shot.penetrations` records both faces) and bodies, damage falls per pass, `damage.context` gets `penetrated`/`wallbang`; `sv_penetration`, `_scale`, `_players`. A one-sided sheet has no exit and stops the round |
 | `trace/` | `DotTrace` (world ray plus hitboxes), `DotTracePhysics` (world via the physics server), `DotTraceFlat` (analytic boxes and a ground plane) |
 | `resolve/` | `DotDamageResolver`, `DotDamageRules`: teams, friendly fire, falloff, criticals; `DotDamageImmunity` (per-entity damage kinds ignored, set from a class profile, none by default) |
 | `net/dot_combat_net_sync.gd` | `DotCombatNetSync`: health, armour and alive as data specs |

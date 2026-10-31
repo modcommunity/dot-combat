@@ -113,6 +113,15 @@ var restore_fn: Callable = Callable()
 ## [member DotDamageRules.pass_through_team_mates] still lets every team-mate through.
 var pass_through_fn: Callable = Callable()
 
+## Master switch for shots that carry a [DotPenetration] (`sv_penetration`).
+var penetration_enabled: bool = true
+
+## Multiplier on every round's penetration power (`sv_penetration_scale`).
+var penetration_scale: float = 1.0
+
+## Whether a round passes bodies, not only walls (`sv_penetration_players`).
+var penetration_players: bool = true
+
 ## entity id -> [DotHitboxSet].
 var _sets: Dictionary = {}
 
@@ -462,37 +471,87 @@ func _trace_shot(shot: DotShot) -> void:
 			shot.impacts.append(shot.origin + direction * shot.max_range)
 		return
 
+	var pen: DotPenetration = null
+	if penetration_enabled and shot.penetration != null and shot.penetration.enabled():
+		pen = shot.penetration.duplicate_scaled(penetration_scale)
+		if not pen.enabled():
+			pen = null
+
 	for pellet in range(shot.pellets.size()):
-		var direction: Vector3 = shot.pellets[pellet]
-		var hit := trace.ray(shot.origin, direction, shot.max_range, _set_list)
+		_trace_pellet(shot, pellet, type, pen, excluded)
+
+	trace.exclude = excluded
+
+
+## One pellet: walls and (under [member penetration_players]) bodies it passes spend [param pen]'s power, damage falls with what is left.
+func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPenetration, excluded: Array) -> void:
+	var direction: Vector3 = shot.pellets[pellet]
+	var from := shot.origin
+	var remaining := shot.max_range
+	var power := pen.power if pen != null else 0.0
+	var passes := 0
+	var walls := 0
+	var skip: Array = excluded.duplicate()
+	var walked := 0.0
+
+	while true:
+		trace.exclude = skip
+		var hit := trace.ray(from, direction, remaining, _set_list)
 
 		if not hit.ok():
 			shot.impacts.append(shot.origin + direction * shot.max_range)
-			continue
+			return
 
-		shot.impacts.append(hit.point)
+		var can_pass := pen != null and passes < pen.max_passes and power > 0.0
 
 		if hit.blocked or hit.entity == null:
+			var exit: DotHitbox.Hit = _wall_exit(hit, direction, pen) if can_pass else null
+			if exit == null:
+				shot.impacts.append(hit.point)
+				return
+			var thickness: float = hit.point.distance_to(exit.point)
+			power -= pen.wall_cost(thickness, hit.material)
+			if power <= 0.0:
+				shot.impacts.append(hit.point)
+				return
+			shot.penetrations.append({
+				"pellet": pellet, "material": hit.material, "thickness": thickness,
+				"entry": hit.point, "exit": exit.point,
+				"entry_normal": hit.normal, "exit_normal": exit.normal,
+			})
+			passes += 1
+			walls += 1
+			walked += hit.distance + thickness
+			from = exit.point + direction * 0.01
+			remaining = shot.max_range - walked
+			if remaining <= 0.0:
+				shot.impacts.append(from)
+				return
 			continue
 
 		var victim := _entity_id_of(hit.entity)
 
 		if victim == 0:
-			continue
+			shot.impacts.append(hit.point)
+			return
 
+		var strength := pen.strength(power) if pen != null and passes > 0 else 1.0
 		var damage := DotDamage.make(
 			shot.attacker,
 			victim,
-			shot.damage * config.damage_scale,
+			shot.damage * config.damage_scale * strength,
 			type
 		)
 		damage.hit_group = hit.group
 		damage.limb = hit.limb
 		DotHitzone.annotate(damage, hit, direction)
 		damage.context["entity"] = hit.entity
+		if passes > 0:
+			damage.context["penetrated"] = passes
+			damage.context["wallbang"] = walls > 0
 		damage.point = hit.point
 		damage.direction = direction
-		damage.distance = hit.distance
+		damage.distance = hit.distance + walked
 		damage.weapon_id = shot.weapon_id
 		damage.tick = shot.tick
 
@@ -500,6 +559,47 @@ func _trace_shot(shot: DotShot) -> void:
 			damage.scale_by(hit.hitbox.damage_scale, "hitbox")
 
 		shot.damages.append(resolver.resolve(damage))
+
+		if not (can_pass and penetration_players):
+			shot.impacts.append(hit.point)
+			return
+
+		power -= pen.body_cost_of(hit.group)
+		if power <= 0.0:
+			shot.impacts.append(hit.point)
+			return
+
+		var body_set := _set_of(hit.entity)
+		if body_set == null:
+			shot.impacts.append(hit.point)
+			return
+		skip.append(body_set)
+		passes += 1
+		walked += hit.distance
+		from = hit.point + direction * 0.01
+		remaining = shot.max_range - walked
+		if remaining <= 0.0:
+			shot.impacts.append(from)
+			return
+
+
+## The far face of the wall [param hit] is on: a ray from [member DotPenetration.max_depth] beyond it, back, against the world only. Null when there is none (a one-sided sheet, or thicker than the depth).
+func _wall_exit(hit: DotHitbox.Hit, direction: Vector3, pen: DotPenetration) -> DotHitbox.Hit:
+	var far := hit.point + direction * pen.max_depth
+	var saved := trace.exclude
+	trace.exclude = _set_list.duplicate()
+	var back := trace.ray(far, -direction, pen.max_depth, _set_list)
+	trace.exclude = saved
+	if not back.ok() or back.entity != null:
+		return null
+	return back
+
+
+func _set_of(entity: Node) -> DotHitboxSet:
+	for set_node in _set_list:
+		if set_node != null and is_instance_valid(set_node) and set_node.entity_owner() == entity:
+			return set_node
+	return null
 
 
 ## The hitbox sets [param shot] passes through: a team-mate's that already holds its muzzle
@@ -569,6 +669,10 @@ const CVAR_FRIENDLY_FIRE := "mp_friendlyfire"
 ## 1 makes neck, hand and foot zones of their own with their own multipliers, 0 folds them into chest, arm and leg ([DotHitzone]).
 const CVAR_HITZONES := "mp_hitzones"
 
+const CVAR_PENETRATION := "sv_penetration"
+const CVAR_PENETRATION_SCALE := "sv_penetration_scale"
+const CVAR_PENETRATION_PLAYERS := "sv_penetration_players"
+
 
 ## The cvars [method bind_cvars] registers, as data, for a host that registers them its own way.
 func cvar_specs() -> Array[Dictionary]:
@@ -592,6 +696,27 @@ func cvar_specs() -> Array[Dictionary]:
 			"name": CVAR_HITZONES,
 			"value": "1" if rules != null and rules.hitzones else "0",
 			"description": "Hit zones: 1 neck, hands and feet have their own damage multipliers, 0 they count as chest, arm and leg",
+			"min": 0.0,
+			"max": 1.0,
+		},
+		{
+			"name": CVAR_PENETRATION,
+			"value": "1" if penetration_enabled else "0",
+			"description": "Bullet penetration: 1 rounds with an ammo profile pass walls and bodies, 0 every wall stops them",
+			"min": 0.0,
+			"max": 1.0,
+		},
+		{
+			"name": CVAR_PENETRATION_SCALE,
+			"value": str(penetration_scale),
+			"description": "Multiplier on every round's penetration power",
+			"min": 0.0,
+			"max": 10.0,
+		},
+		{
+			"name": CVAR_PENETRATION_PLAYERS,
+			"value": "1" if penetration_players else "0",
+			"description": "1 a round passes through a player and can hurt the one behind, 0 a player stops it",
 			"min": 0.0,
 			"max": 1.0,
 		},
@@ -649,6 +774,8 @@ func bind_cvars(add: Callable, flags: int = 0) -> Array:
 ## Applies one of [method cvar_specs]' cvars by name. Returns false for a name that is not
 ## this manager's or a value that is not a number.
 func set_cvar(cvar_name: String, value: String) -> bool:
+	if cvar_name in [CVAR_PENETRATION, CVAR_PENETRATION_SCALE, CVAR_PENETRATION_PLAYERS]:
+		return _set_penetration_cvar(cvar_name, value)
 	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH and cvar_name != CVAR_FRIENDLY_FIRE and cvar_name != CVAR_HITZONES:
 		return false
 
@@ -684,6 +811,23 @@ func set_cvar(cvar_name: String, value: String) -> bool:
 		resolver.rules.set_pass_through_level(rules.pass_through_level())
 
 	DotLog.debug(CHANNEL, "team-mate pass-through set", {"level": rules.pass_through_level()})
+	return true
+
+
+func _set_penetration_cvar(cvar_name: String, value: String) -> bool:
+	var text := value.strip_edges().to_lower()
+	if text in ["true", "false"]:
+		text = "1" if text == "true" else "0"
+	if not text.is_valid_float():
+		DotLog.warn(CHANNEL, "cvar is not a number; left as it was", {"cvar": cvar_name, "value": value})
+		return false
+	var number := text.to_float()
+	if cvar_name == CVAR_PENETRATION:
+		penetration_enabled = number != 0.0
+	elif cvar_name == CVAR_PENETRATION_PLAYERS:
+		penetration_players = number != 0.0
+	else:
+		penetration_scale = maxf(0.0, number)
 	return true
 
 

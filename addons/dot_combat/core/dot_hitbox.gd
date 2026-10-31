@@ -93,6 +93,9 @@ class Hit extends RefCounted:
 	## thing that distinguishes the two is this flag.
 	var blocked: bool = false
 
+	## Surface material id of a world hit, empty when the backend does not know.
+	var material: StringName = &""
+
 	func ok() -> bool:
 		return distance >= 0.0
 

@@ -19,6 +19,9 @@ var floor_y: float = -INF
 ## Axis-aligned solid boxes, in world space.
 var boxes: Array[AABB] = []
 
+## Material id per box, parallel to [member boxes] (missing = none).
+var box_materials: Array[StringName] = []
+
 
 static func with_floor(y: float = 0.0) -> DotTraceFlat:
 	# Not this class's own name. A script that names itself in an expression, loaded after
@@ -30,8 +33,9 @@ static func with_floor(y: float = 0.0) -> DotTraceFlat:
 
 
 ## Adds a solid box. Returns self, so a level is one chained expression.
-func add_box(box: AABB) -> DotTraceFlat:
+func add_box(box: AABB, material: StringName = &"") -> DotTraceFlat:
 	boxes.append(box.abs())
+	box_materials.append(material)
 	return self
 
 
@@ -61,6 +65,7 @@ func add_wall(
 
 func clear() -> void:
 	boxes.clear()
+	box_materials.clear()
 
 
 func _world_ray(
@@ -77,12 +82,15 @@ func _world_ray(
 			nearest = t
 			best = _make_hit(from + direction * t, Vector3.UP, t)
 
-	for box in boxes:
+	for i in boxes.size():
+		var box := boxes[i]
 		var t := _ray_aabb(from, direction, box, nearest)
 		if t < 0.0:
 			continue
 		nearest = t
 		best = _make_hit(from + direction * t, _box_normal(box, from + direction * t), t)
+		if i < box_materials.size():
+			best.material = box_materials[i]
 
 	return best
 

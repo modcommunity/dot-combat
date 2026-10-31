@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 302
+const CHECKS := 321
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 26
+const SECTIONS := 27
 
 
 func _ready() -> void:
@@ -46,6 +46,7 @@ func _run() -> void:
 	_test_team_mate_pass_through_cvar()
 	_test_client_follows_the_server_cvar()
 	_test_manager_walls()
+	_test_penetration()
 	_test_manager_splash()
 	_test_manager_validation()
 	_test_lag_compensation()
@@ -888,7 +889,7 @@ func _test_team_mate_pass_through_cvar() -> void:
 		return cv
 	var bound := manager.bind_cvars(add, 9)
 	_check(
-		bound.size() == 3 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
+		bound.size() == 6 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
 		"bind_cvars registers mp_teammate_passthrough with the caller's flags",
 		str(made.map(func(c: FakeCvar) -> String: return c.cvar_name))
 	)
@@ -989,6 +990,97 @@ func _test_client_follows_the_server_cvar() -> void:
 	manager.queue_free()
 	remove_child(manager)
 	link.queue_free()
+	_clear_players()
+	_done()
+
+
+func _pen_shot(tick: int, pen: DotPenetration) -> DotShot:
+	var shot := _rifle_shot(1, tick, tick)
+	shot.origin = Vector3(0.0, 1.0, 0.0)
+	shot.direction = Vector3.FORWARD
+	shot.tick = tick
+	shot.penetration = pen
+	shot.scatter()
+	return shot
+
+
+func _test_penetration() -> void:
+	_section("penetration: walls and bodies")
+
+	var trace := DotTraceFlat.with_floor(0.0)
+	trace.add_box(AABB(Vector3(-3.0, 0.0, -5.2), Vector3(6.0, 3.0, 0.4)), &"wood")
+	var manager := _make_manager(trace, DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -10.0))
+	_hitboxes_of(victim).register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var pen := DotPenetration.new()
+	pen.power = 1.0
+	pen.materials = {&"wood": 1.0, &"steel": 10.0}
+	pen.body_cost = 0.1
+
+	var plain := _pen_shot(1, null)
+	manager.resolve_shot(plain)
+	_check(plain.damages.is_empty() and plain.penetrations.is_empty(), "no profile: the wall stops the round as before")
+
+	var shot := _pen_shot(2, pen)
+	manager.resolve_shot(shot)
+	_check(shot.damages.size() == 1, "a round with power passes the wall and hits the player behind")
+	_check(shot.penetrations.size() == 1, "one wall passed is recorded")
+	_check(shot.penetrations[0]["material"] == &"wood", "the record names the material")
+	_close(float(shot.penetrations[0]["thickness"]), 0.4, "and the thickness", 0.05)
+	_close(shot.penetrations[0]["entry"].z, -4.8, "entry is on the near face", 0.05)
+	_close(shot.penetrations[0]["exit"].z, -5.2, "exit is on the far face", 0.05)
+	_close(float(shot.damages[0].amount), 25.0 * 0.6, "damage falls with the power the wall spent", 0.8)
+
+	manager.penetration_scale = 0.2
+	var weak := _pen_shot(3, pen)
+	manager.resolve_shot(weak)
+	_check(weak.damages.is_empty(), "sv_penetration_scale below the wall's cost stops it")
+	manager.penetration_scale = 1.0
+
+	manager.penetration_enabled = false
+	var off := _pen_shot(4, pen)
+	manager.resolve_shot(off)
+	_check(off.damages.is_empty(), "sv_penetration 0 stops it")
+	manager.penetration_enabled = true
+
+	var steel := DotTraceFlat.with_floor(0.0)
+	steel.add_box(AABB(Vector3(-3.0, 0.0, -5.2), Vector3(6.0, 3.0, 0.4)), &"steel")
+	manager.trace = steel
+	var blocked := _pen_shot(5, pen)
+	manager.resolve_shot(blocked)
+	_check(blocked.damages.is_empty() and blocked.penetrations.is_empty(), "a material that costs more than the power stops the round")
+	manager.trace = trace
+
+	_check(manager.set_cvar("sv_penetration_scale", "0.5") and is_equal_approx(manager.penetration_scale, 0.5), "the scale cvar applies")
+	_check(manager.set_cvar("sv_penetration", "0") and not manager.penetration_enabled, "the switch cvar applies")
+	_check(manager.set_cvar("sv_penetration_players", "0") and not manager.penetration_players, "the players cvar applies")
+	manager.penetration_scale = 1.0
+	manager.penetration_enabled = true
+	manager.penetration_players = true
+
+	# Two players in a line, no wall: the near one is hit at full damage, the far one for less.
+	var open := DotTraceFlat.with_floor(0.0)
+	manager.trace = open
+	var near := _make_player(Vector3(0.0, 0.0, -4.0))
+	_hitboxes_of(near).register_with(manager, 3)
+	manager.register_health(3, _health_of(near))
+	var line := _pen_shot(6, pen)
+	manager.resolve_shot(line)
+	_check(line.damages.size() == 2, "a round passes the first player and hits the second")
+	_check(line.damages[0].amount > line.damages[1].amount, "the second hit is weaker")
+	_check(line.damages[1].context.get("penetrated", 0) == 1, "and is marked as penetrated")
+	_check(_health_of(near).health < 100.0 and _health_of(victim).health < 100.0, "both are hurt")
+
+	manager.penetration_players = false
+	var stop := _pen_shot(7, pen)
+	manager.resolve_shot(stop)
+	_check(stop.damages.size() == 1, "sv_penetration_players 0 stops at the first body")
+	manager.penetration_players = true
+
+	manager.queue_free()
+	remove_child(manager)
 	_clear_players()
 	_done()
 

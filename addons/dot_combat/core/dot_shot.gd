@@ -97,6 +97,12 @@ var damages: Array[DotDamage] = []
 ## range.
 var impacts: Array[Vector3] = []
 
+## What the round can pass through; null (the default) stops at the first wall or body, as before.
+var penetration: DotPenetration = null
+
+## One entry per wall passed: `{pellet, material, thickness, entry, exit, entry_normal, exit_normal}`. A decal goes on both faces.
+var penetrations: Array[Dictionary] = []
+
 
 static func make(
 	p_weapon_id: StringName,

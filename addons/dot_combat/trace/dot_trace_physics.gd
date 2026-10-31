@@ -83,6 +83,8 @@ func _world_ray(
 	hit.distance = from.distance_to(hit.point)
 	hit.blocked = true
 	hit.group = DotHitGroup.GENERIC
+	if material_fn.is_valid():
+		hit.material = StringName(material_fn.call(result.get("collider")))
 	return hit
 
 

@@ -28,6 +28,9 @@ var exclude_rids: Array[RID] = []
 ## What lets dropped weapons be shot without the trace knowing about them.
 var ray_observer: Callable = Callable()
 
+## `func(collider) -> StringName`: the surface material of a world hit, for backends that have a collider.
+var material_fn: Callable = Callable()
+
 ## Told of every splash query: [code]call(centre, radius)[/code].
 var sphere_observer: Callable = Callable()
 
