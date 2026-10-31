@@ -31,6 +31,9 @@ var ray_observer: Callable = Callable()
 ## `func(collider) -> StringName`: the surface material of a world hit, for backends that have a collider.
 var material_fn: Callable = Callable()
 
+## `func(collider, shape_index) -> StringName`, asked before [member material_fn]: one static body built of many boxes names each box's material on its shape.
+var material_shape_fn: Callable = Callable()
+
 ## Told of every splash query: [code]call(centre, radius)[/code].
 var sphere_observer: Callable = Callable()
 
