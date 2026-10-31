@@ -122,6 +122,12 @@ var penetration_scale: float = 1.0
 ## Whether a round passes bodies, not only walls (`sv_penetration_players`).
 var penetration_players: bool = true
 
+## Whether shallow hits on hard materials bounce (`sv_ricochet`); needs a round whose [DotPenetration] lists ricochet materials.
+var ricochet_enabled: bool = false
+
+## Metres a round is taken to cross a one-sided sheet (no far face to find), per material. A material not listed stops the round.
+var sheet_thickness: Dictionary = {&"glass": 0.01, &"wood": 0.05, &"plastic": 0.02, &"cloth": 0.01, &"foliage": 0.02, &"metal": 0.015}
+
 ## entity id -> [DotHitboxSet].
 var _sets: Dictionary = {}
 
@@ -464,6 +470,8 @@ func _trace_shot(shot: DotShot) -> void:
 	trace.exclude = excluded
 
 	shot.impacts.clear()
+	shot.penetrations.clear()
+	shot.ricochets.clear()
 
 	if shot.deferred:
 		# Deferred: an entity with a lifetime, not resolved here; only the endpoint is recorded.
@@ -493,6 +501,7 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 	var walls := 0
 	var skip: Array = excluded.duplicate()
 	var walked := 0.0
+	var bounces := 0
 
 	while true:
 		trace.exclude = skip
@@ -505,7 +514,27 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 		var can_pass := pen != null and passes < pen.max_passes and power > 0.0
 
 		if hit.blocked or hit.entity == null:
+			if _ricochets_off(hit, direction, pen, bounces):
+				var grazing := rad_to_deg(asin(clampf(absf(direction.dot(hit.normal)), 0.0, 1.0)))
+				direction = direction.bounce(hit.normal).normalized()
+				power *= pen.ricochet_keep
+				bounces += 1
+				shot.ricochets.append({
+					"pellet": pellet, "material": hit.material, "point": hit.point,
+					"normal": hit.normal, "angle": grazing, "direction": direction,
+				})
+				walked += hit.distance
+				from = hit.point + hit.normal * 0.02
+				remaining = shot.max_range - walked
+				if power <= 0.0 or remaining <= 0.0:
+					shot.impacts.append(hit.point)
+					return
+				continue
 			var exit: DotHitbox.Hit = _wall_exit(hit, direction, pen) if can_pass else null
+			var sheet := false
+			if can_pass and exit == null:
+				exit = _sheet_exit(hit, direction)
+				sheet = exit != null
 			if exit == null:
 				shot.impacts.append(hit.point)
 				return
@@ -517,7 +546,7 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 			shot.penetrations.append({
 				"pellet": pellet, "material": hit.material, "thickness": thickness,
 				"entry": hit.point, "exit": exit.point,
-				"entry_normal": hit.normal, "exit_normal": exit.normal,
+				"entry_normal": hit.normal, "exit_normal": exit.normal, "sheet": sheet,
 			})
 			passes += 1
 			walls += 1
@@ -535,7 +564,7 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 			shot.impacts.append(hit.point)
 			return
 
-		var strength := pen.strength(power) if pen != null and passes > 0 else 1.0
+		var strength := pen.strength(power) if pen != null and (passes > 0 or bounces > 0) else 1.0
 		var damage := DotDamage.make(
 			shot.attacker,
 			victim,
@@ -549,6 +578,8 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 		if passes > 0:
 			damage.context["penetrated"] = passes
 			damage.context["wallbang"] = walls > 0
+		if bounces > 0:
+			damage.context["ricochet"] = bounces
 		damage.point = hit.point
 		damage.direction = direction
 		damage.distance = hit.distance + walked
@@ -593,6 +624,28 @@ func _wall_exit(hit: DotHitbox.Hit, direction: Vector3, pen: DotPenetration) -> 
 	if not back.ok() or back.entity != null:
 		return null
 	return back
+
+
+## True when [param hit] is a wall this round bounces off: [member ricochet_enabled], a listed material, a shallow enough angle.
+func _ricochets_off(hit: DotHitbox.Hit, direction: Vector3, pen: DotPenetration, bounces: int) -> bool:
+	if not ricochet_enabled or pen == null or bounces >= pen.max_ricochets or hit.normal.length_squared() < 0.25:
+		return false
+	var grazing := rad_to_deg(asin(clampf(absf(direction.dot(hit.normal)), 0.0, 1.0)))
+	return pen.ricochets(hit.material, grazing)
+
+
+## A far face invented for a one-sided sheet: [member sheet_thickness] of the material beyond the entry, or null when its thickness is not known (then the round stops).
+func _sheet_exit(hit: DotHitbox.Hit, direction: Vector3) -> DotHitbox.Hit:
+	var thickness := float(sheet_thickness.get(hit.material, sheet_thickness.get(String(hit.material), 0.0)))
+	if thickness <= 0.0:
+		return null
+	var out := DotHitbox.Hit.new()
+	out.distance = hit.distance + thickness
+	out.point = hit.point + direction * thickness
+	out.normal = -hit.normal
+	out.material = hit.material
+	out.blocked = true
+	return out
 
 
 func _set_of(entity: Node) -> DotHitboxSet:
@@ -672,6 +725,7 @@ const CVAR_HITZONES := "mp_hitzones"
 const CVAR_PENETRATION := "sv_penetration"
 const CVAR_PENETRATION_SCALE := "sv_penetration_scale"
 const CVAR_PENETRATION_PLAYERS := "sv_penetration_players"
+const CVAR_RICOCHET := "sv_ricochet"
 
 
 ## The cvars [method bind_cvars] registers, as data, for a host that registers them its own way.
@@ -717,6 +771,13 @@ func cvar_specs() -> Array[Dictionary]:
 			"name": CVAR_PENETRATION_PLAYERS,
 			"value": "1" if penetration_players else "0",
 			"description": "1 a round passes through a player and can hurt the one behind, 0 a player stops it",
+			"min": 0.0,
+			"max": 1.0,
+		},
+		{
+			"name": CVAR_RICOCHET,
+			"value": "1" if ricochet_enabled else "0",
+			"description": "Ricochet: 1 shallow hits on the hard materials an ammo profile lists bounce on, 0 they stop or pass as before",
 			"min": 0.0,
 			"max": 1.0,
 		},
@@ -774,7 +835,7 @@ func bind_cvars(add: Callable, flags: int = 0) -> Array:
 ## Applies one of [method cvar_specs]' cvars by name. Returns false for a name that is not
 ## this manager's or a value that is not a number.
 func set_cvar(cvar_name: String, value: String) -> bool:
-	if cvar_name in [CVAR_PENETRATION, CVAR_PENETRATION_SCALE, CVAR_PENETRATION_PLAYERS]:
+	if cvar_name in [CVAR_PENETRATION, CVAR_PENETRATION_SCALE, CVAR_PENETRATION_PLAYERS, CVAR_RICOCHET]:
 		return _set_penetration_cvar(cvar_name, value)
 	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH and cvar_name != CVAR_FRIENDLY_FIRE and cvar_name != CVAR_HITZONES:
 		return false
@@ -826,6 +887,8 @@ func _set_penetration_cvar(cvar_name: String, value: String) -> bool:
 		penetration_enabled = number != 0.0
 	elif cvar_name == CVAR_PENETRATION_PLAYERS:
 		penetration_players = number != 0.0
+	elif cvar_name == CVAR_RICOCHET:
+		ricochet_enabled = number != 0.0
 	else:
 		penetration_scale = maxf(0.0, number)
 	return true

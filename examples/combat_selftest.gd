@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 321
+const CHECKS := 331
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 27
+const SECTIONS := 28
 
 
 func _ready() -> void:
@@ -47,6 +47,7 @@ func _run() -> void:
 	_test_client_follows_the_server_cvar()
 	_test_manager_walls()
 	_test_penetration()
+	_test_ricochet_and_sheets()
 	_test_manager_splash()
 	_test_manager_validation()
 	_test_lag_compensation()
@@ -889,7 +890,7 @@ func _test_team_mate_pass_through_cvar() -> void:
 		return cv
 	var bound := manager.bind_cvars(add, 9)
 	_check(
-		bound.size() == 6 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
+		bound.size() == 7 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
 		"bind_cvars registers mp_teammate_passthrough with the caller's flags",
 		str(made.map(func(c: FakeCvar) -> String: return c.cvar_name))
 	)
@@ -1079,6 +1080,89 @@ func _test_penetration() -> void:
 	_check(stop.damages.size() == 1, "sv_penetration_players 0 stops at the first body")
 	manager.penetration_players = true
 
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+## A trace whose far faces are missing: a ray travelling toward +Z finds nothing, as with a one-sided collision sheet.
+class OneSidedTrace extends DotTraceFlat:
+	func _world_ray(from: Vector3, direction: Vector3, max_distance: float) -> DotHitbox.Hit:
+		if direction.z > 0.0:
+			return DotHitbox.Hit.new()
+		return super._world_ray(from, direction, max_distance)
+
+
+func _test_ricochet_and_sheets() -> void:
+	_section("penetration: ricochet and one-sided sheets")
+
+	var trace := OneSidedTrace.new()
+	trace.floor_y = 0.0
+	trace.add_box(AABB(Vector3(-3.0, 0.0, -4.81), Vector3(6.0, 3.0, 0.01)), &"glass")
+	trace.add_box(AABB(Vector3(-3.0, 0.0, -8.2), Vector3(6.0, 3.0, 0.4)), &"concrete")
+	var manager := _make_manager(trace, DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -6.5))
+	_hitboxes_of(victim).register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var pen := DotPenetration.new()
+	pen.power = 1.0
+	pen.materials = {&"glass": 1.0, &"concrete": 5.0}
+	pen.body_cost = 0.1
+
+	var sheet := _pen_shot(1, pen)
+	manager.resolve_shot(sheet)
+	_check(sheet.penetrations.size() == 1 and sheet.penetrations[0]["sheet"] == true, "a one-sided glass sheet is passed on the material's thickness")
+	_check(sheet.damages.size() == 1, "and the player behind it is hit")
+	_close(float(sheet.penetrations[0]["thickness"]), 0.01, "the sheet's thickness is the per-material fallback", 0.001)
+
+	var saved: Dictionary = manager.sheet_thickness
+	manager.sheet_thickness = {}
+	var stopped := _pen_shot(2, pen)
+	manager.resolve_shot(stopped)
+	_check(stopped.penetrations.is_empty() and stopped.damages.is_empty(), "a material with no known thickness stops at a one-sided sheet")
+	manager.sheet_thickness = saved
+
+	var floor_pen := DotPenetration.new()
+	floor_pen.power = 1.0
+	floor_pen.ricochet_materials = PackedStringArray(["concrete"])
+	floor_pen.ricochet_angle = 15.0
+	floor_pen.ricochet_keep = 0.5
+	var grazing := _pen_shot(3, floor_pen)
+	grazing.origin = Vector3(0.0, 1.0, 0.0)
+	grazing.direction = Vector3(0.0, -0.05, -1.0).normalized()
+	grazing.scatter()
+	manager.resolve_shot(grazing)
+	_check(grazing.ricochets.is_empty(), "sv_ricochet is off by default: nothing bounces")
+
+	var wall_trace := OneSidedTrace.new()
+	wall_trace.floor_y = 0.0
+	wall_trace.add_box(AABB(Vector3(-30.0, 0.0, -5.2), Vector3(60.0, 3.0, 0.4)), &"concrete")
+	var m2 := _make_manager(wall_trace, DotDamageRules.new())
+	m2.ricochet_enabled = true
+	var shallow := _pen_shot(4, floor_pen)
+	shallow.origin = Vector3(-20.0, 1.0, 0.0)
+	shallow.direction = Vector3(1.0, 0.0, -0.1).normalized()
+	shallow.scatter()
+	m2.resolve_shot(shallow)
+	_check(shallow.ricochets.size() == 1 and shallow.ricochets[0]["direction"].z > 0.0, "a shallow hit on a listed material bounces off")
+	_check(shallow.penetrations.is_empty(), "and does not pass the wall")
+	var steep := _pen_shot(5, floor_pen)
+	m2.resolve_shot(steep)
+	_check(steep.ricochets.is_empty(), "a square-on hit does not bounce")
+	var soft := DotPenetration.new()
+	soft.power = 1.0
+	soft.ricochet_angle = 15.0
+	var other := _pen_shot(6, soft)
+	other.origin = Vector3(-20.0, 1.0, 0.0)
+	other.direction = Vector3(1.0, 0.0, -0.1).normalized()
+	other.scatter()
+	m2.resolve_shot(other)
+	_check(other.ricochets.is_empty(), "a material the profile does not list does not bounce")
+	_check(m2.set_cvar("sv_ricochet", "0") and not m2.ricochet_enabled and m2.set_cvar("sv_ricochet", "1") and m2.ricochet_enabled, "the sv_ricochet cvar applies")
+
+	m2.queue_free()
 	manager.queue_free()
 	remove_child(manager)
 	_clear_players()

@@ -20,6 +20,14 @@ var body_zones: Dictionary = {}
 var min_damage: float = 0.0
 ## Most walls and bodies one pellet passes.
 var max_passes: int = 4
+## Materials a shallow hit bounces off (empty: no ricochet).
+var ricochet_materials: PackedStringArray = PackedStringArray()
+## Widest angle between ray and surface, in degrees, that still bounces.
+var ricochet_angle: float = 0.0
+## Share of power (and so of damage) a bounce keeps.
+var ricochet_keep: float = 0.6
+## Most bounces one pellet makes.
+var max_ricochets: int = 1
 ## Per-metre damage lost to flight is not here: falloff is the damage type's.
 
 
@@ -41,6 +49,11 @@ func body_cost_of(group: StringName) -> float:
 	return body_cost * float(body_zones.get(group, body_zones.get(String(group), 1.0)))
 
 
+## Whether a ray meeting [param material] at [param grazing] degrees from the surface bounces.
+func ricochets(material: StringName, grazing: float) -> bool:
+	return ricochet_angle > 0.0 and max_ricochets > 0 and grazing <= ricochet_angle and ricochet_materials.has(String(material))
+
+
 ## Damage multiplier with [param left] power remaining.
 func strength(left: float) -> float:
 	if power <= 0.0 or left <= 0.0:
@@ -58,4 +71,8 @@ func duplicate_scaled(scale: float) -> DotPenetration:
 	p.body_zones = body_zones
 	p.min_damage = min_damage
 	p.max_passes = max_passes
+	p.ricochet_materials = ricochet_materials
+	p.ricochet_angle = ricochet_angle
+	p.ricochet_keep = ricochet_keep
+	p.max_ricochets = max_ricochets
 	return p

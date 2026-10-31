@@ -103,6 +103,9 @@ var penetration: DotPenetration = null
 ## One entry per wall passed: `{pellet, material, thickness, entry, exit, entry_normal, exit_normal}`. A decal goes on both faces.
 var penetrations: Array[Dictionary] = []
 
+## One entry per bounce: `{pellet, material, point, normal, angle, direction}` (direction is the way out). Only with `sv_ricochet`.
+var ricochets: Array[Dictionary] = []
+
 
 static func make(
 	p_weapon_id: StringName,
