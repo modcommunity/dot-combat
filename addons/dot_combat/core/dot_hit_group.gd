@@ -16,6 +16,9 @@ const CHEST := &"chest"
 const STOMACH := &"stomach"
 const ARM := &"arm"
 const LEG := &"leg"
+const NECK := &"neck"
+const HAND := &"hand"
+const FOOT := &"foot"
 
 ## Used when a hitbox declares no group, and when a trace hits a collider with no
 ## hitboxes at all. Multiplier 1.0 by construction — see [method multiplier].
@@ -31,8 +34,21 @@ static func defaults() -> DotHitGroup:
 	groups.set_multiplier(STOMACH, 1.25)
 	groups.set_multiplier(ARM, 0.75)
 	groups.set_multiplier(LEG, 0.75)
+	groups.set_multiplier(NECK, 2.0)
+	groups.set_multiplier(HAND, 0.5)
+	groups.set_multiplier(FOOT, 0.5)
 	return groups
 
+
+## Overrides multipliers from data, e.g. the `hit_groups:` map of `cfg/addons/dot-combat/*.yml`. Returns how many applied.
+func apply_dict(data: Dictionary) -> int:
+	var applied := 0
+	for key in data:
+		var v: Variant = data[key]
+		if (v is float or v is int) and is_finite(float(v)):
+			set_multiplier(StringName(str(key)), float(v))
+			applied += 1
+	return applied
 
 func set_multiplier(group: StringName, value: float) -> void:
 	_multipliers[group] = maxf(0.0, value)

@@ -22,6 +22,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `core/dot_fall_damage.gd`, `dot_fall_damage_rules.gd` | `DotFallDamage` (per player: a controller's `landed(impact)` becomes `apply_damage`, authority only) and `DotFallDamageRules` (`sv_falldamage`, `_threshold`, `_scale`; off by default; water and soft surfaces ignored) |
 | `core/dot_defib.gd` | `DotDefib`: a defibrillator as data (charges, cooldown, reach, charge time, revive share, body-age limit); `check(now, body_age, distance)` says why a try refuses, the game owns the hold, the body and the revive |
 | `core/dot_spread.gd` | `DotSpread`: deterministic scatter over dot-core's `DotRandomStream` |
+| `core/dot_hitzone.gd` | `DotHitzone`: fine zones (neck, hand, foot beside head, chest, stomach, arm, leg), `coarse()` fold-back, left/middle/right `side_of`; `mp_hitzones` (default 0) decides whether the fine ones carry their own multiplier; multipliers from `hit_groups:` in `cfg/addons/dot-combat/*.yml` |
 | `core/dot_hitbox.gd`, `dot_hitbox_set.gd`, `dot_hit_group.gd` | analytic capsule, box and sphere hitboxes; tie-break by precedence |
 | `core/dot_stomp.gd`, `dot_stomp_rules.gd` | `DotStomp` (pure head-landing detector: fall speed, head gap, reach, cooldown, team) and `DotStompRules` (`sv_stomp*` cvars; off by default; the game applies the damage and bounce, with `context.ignores_teams` for same-team) |
 | `core/dot_health.gd`, `dot_damage.gd`, `dot_damage_type.gd` | health and armour, the damage event, falloff |

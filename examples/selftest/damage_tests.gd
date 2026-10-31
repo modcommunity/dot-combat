@@ -324,3 +324,61 @@ func _test_freed_hitbox() -> void:
 	_check(catcher.errors.is_empty(), "and none of that raised an engine error", str(catcher.errors))
 
 	_done()
+
+
+func _zone_shot(manager: DotCombatManager, seq: int, at: Vector3) -> DotDamage:
+	var shot := _rifle_shot(1, 200 + seq, seq)
+	shot.origin = at
+	shot.direction = Vector3.FORWARD
+	shot.scatter()
+	manager.resolve_shot(shot)
+	return shot.damages[0] if not shot.damages.is_empty() else null
+
+
+func _test_hitzones() -> void:
+	_section("hitzones")
+
+	var rules := DotDamageRules.new()
+	var manager := _make_manager(DotTraceFlat.with_floor(0.0), rules)
+	var victim := _make_player(Vector3(0.0, 0.0, -10.0), 100000.0)
+	var set_node := _hitboxes_of(victim)
+	var neck := DotHitbox.new()
+	neck.group = DotHitGroup.NECK
+	neck.shape = DotHitbox.Shape.SPHERE
+	neck.radius = 0.4
+	neck.position = Vector3(0.0, 1.5, 0.0)
+	neck.precedence = 20
+	set_node.add_child(neck)
+	var foot := DotHitbox.new()
+	foot.group = DotHitGroup.FOOT
+	foot.shape = DotHitbox.Shape.SPHERE
+	foot.radius = 0.3
+	foot.position = Vector3(0.0, 0.05, 0.0)
+	foot.precedence = 20
+	set_node.add_child(foot)
+	set_node.refresh()
+	set_node.register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var chest := _zone_shot(manager, 1, Vector3(0.0, 1.0, 0.0))
+	var base := chest.amount
+	var off := _zone_shot(manager, 2, Vector3(0.0, 1.45, 0.0))
+	_check(off.hit_group == DotHitGroup.NECK, "a neck box reports the neck zone", str(off.hit_group))
+	_close(off.amount, base, "zones off: the neck counts as chest")
+	var leg_off := _zone_shot(manager, 3, Vector3(0.0, 0.05, 0.0))
+	var leg_ref := _zone_shot(manager, 4, Vector3(0.0, 0.5, 0.0))
+	_close(leg_off.amount, leg_ref.amount, "zones off: the foot counts as leg")
+
+	_check(manager.set_cvar(DotCombatManager.CVAR_HITZONES, "1") and rules.hitzones, "mp_hitzones turns zones on")
+	_close(_zone_shot(manager, 5, Vector3(0.0, 1.45, 0.0)).amount, base * 2.0, "zones on: neck takes its own multiplier")
+	_close(_zone_shot(manager, 6, Vector3(0.0, 0.05, 0.0)).amount, leg_ref.amount * 0.5 / 0.75, "zones on: foot takes its own multiplier")
+
+	var data := manager.resolver.hit_groups.apply_dict({"neck": 3.0, "hand": "x", "bogus_zone": 0.1})
+	_check(data == 2 and is_equal_approx(manager.resolver.hit_groups.multiplier(&"neck"), 3.0), "data overrides multipliers and skips non-numbers")
+	_close(_zone_shot(manager, 7, Vector3(0.0, 1.45, 0.0)).amount, base * 3.0, "and the next shot uses them")
+
+	_check(chest.context.get(DotHitzone.CONTEXT_SIDE) == DotHitzone.SIDE_MIDDLE, "a centred hit is middle")
+	_check(_zone_shot(manager, 8, Vector3(0.2, 1.0, 0.0)).context.get(DotHitzone.CONTEXT_SIDE) == DotHitzone.SIDE_RIGHT, "a hit right of centre is right")
+	_check(_zone_shot(manager, 9, Vector3(-0.2, 1.0, 0.0)).context.get(DotHitzone.CONTEXT_SIDE) == DotHitzone.SIDE_LEFT, "and left of centre is left")
+	_check(DotHitzone.coarse(&"hand") == DotHitGroup.ARM and DotHitzone.coarse(DotHitGroup.HEAD) == DotHitGroup.HEAD, "coarse folds hand to arm and leaves head")
+	_done()

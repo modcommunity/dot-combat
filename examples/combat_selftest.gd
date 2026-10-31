@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 290
+const CHECKS := 302
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 25
+const SECTIONS := 26
 
 
 func _ready() -> void:
@@ -51,6 +51,7 @@ func _run() -> void:
 	_test_lag_compensation()
 	_test_net_sync()
 	_test_limbs()
+	_test_hitzones()
 	_test_freed_hitbox()
 	await _test_sentry()
 	_test_defib()
@@ -887,7 +888,7 @@ func _test_team_mate_pass_through_cvar() -> void:
 		return cv
 	var bound := manager.bind_cvars(add, 9)
 	_check(
-		bound.size() == 2 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
+		bound.size() == 3 and made[0].cvar_name == "mp_teammate_passthrough" and made[0].flags == 9,
 		"bind_cvars registers mp_teammate_passthrough with the caller's flags",
 		str(made.map(func(c: FakeCvar) -> String: return c.cvar_name))
 	)

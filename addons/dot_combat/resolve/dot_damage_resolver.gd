@@ -80,7 +80,7 @@ func resolve(damage: DotDamage) -> DotDamage:
 		damage.scale_by(type.falloff_scale(damage.distance), "falloff")
 
 	if rules.hit_groups and type.uses_hit_groups and hit_groups != null:
-		damage.scale_by(hit_groups.multiplier(damage.hit_group), "group")
+		damage.scale_by(hit_groups.multiplier(damage.hit_group if rules.hitzones else DotHitzone.coarse(damage.hit_group)), "group")
 
 	damage.critical = is_critical(damage)
 

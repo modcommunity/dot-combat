@@ -67,6 +67,9 @@ extends Resource
 ## and what an explosion always wants — see [member DotDamageType.uses_hit_groups].
 @export var hit_groups: bool = true
 
+## Whether neck, hand and foot are zones of their own. Off folds them into chest, arm and leg ([DotHitzone.coarse]). Cvar `mp_hitzones`.
+@export var hitzones: bool = false
+
 @export_group("Criticals")
 
 ## Whether a headshot is a critical hit.
@@ -156,6 +159,7 @@ func describe() -> Dictionary:
 		"pass_through_team_mates": pass_through_team_mates,
 		"self_damage": self_damage,
 		"hit_groups": hit_groups,
+		"hitzones": hitzones,
 		"falloff": falloff,
 		"minimum": minimum,
 		"maximum": maximum,

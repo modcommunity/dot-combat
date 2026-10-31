@@ -189,6 +189,11 @@ func setup() -> DotResult:
 		if resolver.hit_groups == null:
 			resolver.hit_groups = DotHitGroup.defaults()
 
+	if cfg_limbs.ok and resolver.hit_groups != null:
+		var zones: Variant = DotAddonConfig.get_value(cfg_limbs.value, "hit_groups", {})
+		if zones is Dictionary:
+			var _n := resolver.hit_groups.apply_dict(zones)
+
 	if trace == null:
 		DotLog.warn(
 			CHANNEL,
@@ -483,6 +488,7 @@ func _trace_shot(shot: DotShot) -> void:
 		)
 		damage.hit_group = hit.group
 		damage.limb = hit.limb
+		DotHitzone.annotate(damage, hit, direction)
 		damage.context["entity"] = hit.entity
 		damage.point = hit.point
 		damage.direction = direction
@@ -560,6 +566,9 @@ const CVAR_TEAMMATE_PASSTHROUGH := "mp_teammate_passthrough"
 ## 1 lets a shooter damage a team-mate, 0 refuses it. The default is whatever the game's [member rules] say when the cvar binds, so binding it changes no game's behaviour until an operator sets it.
 const CVAR_FRIENDLY_FIRE := "mp_friendlyfire"
 
+## 1 makes neck, hand and foot zones of their own with their own multipliers, 0 folds them into chest, arm and leg ([DotHitzone]).
+const CVAR_HITZONES := "mp_hitzones"
+
 
 ## The cvars [method bind_cvars] registers, as data, for a host that registers them its own way.
 func cvar_specs() -> Array[Dictionary]:
@@ -576,6 +585,13 @@ func cvar_specs() -> Array[Dictionary]:
 			"name": CVAR_FRIENDLY_FIRE,
 			"value": "1" if rules != null and rules.friendly_fire else "0",
 			"description": "Friendly fire: 1 a shooter can damage a team-mate, 0 team-mates are immune to each other",
+			"min": 0.0,
+			"max": 1.0,
+		},
+		{
+			"name": CVAR_HITZONES,
+			"value": "1" if rules != null and rules.hitzones else "0",
+			"description": "Hit zones: 1 neck, hands and feet have their own damage multipliers, 0 they count as chest, arm and leg",
 			"min": 0.0,
 			"max": 1.0,
 		},
@@ -633,11 +649,11 @@ func bind_cvars(add: Callable, flags: int = 0) -> Array:
 ## Applies one of [method cvar_specs]' cvars by name. Returns false for a name that is not
 ## this manager's or a value that is not a number.
 func set_cvar(cvar_name: String, value: String) -> bool:
-	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH and cvar_name != CVAR_FRIENDLY_FIRE:
+	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH and cvar_name != CVAR_FRIENDLY_FIRE and cvar_name != CVAR_HITZONES:
 		return false
 
 	var text := value.strip_edges().to_lower()
-	if cvar_name == CVAR_FRIENDLY_FIRE and text in ["true", "false"]:
+	if (cvar_name == CVAR_FRIENDLY_FIRE or cvar_name == CVAR_HITZONES) and text in ["true", "false"]:
 		text = "1" if text == "true" else "0"
 
 	if not text.is_valid_float():
@@ -646,6 +662,12 @@ func set_cvar(cvar_name: String, value: String) -> bool:
 
 	if rules == null:
 		rules = DotDamageRules.new()
+
+	if cvar_name == CVAR_HITZONES:
+		rules.hitzones = text.to_float() != 0.0
+		if resolver != null and resolver.rules != null and resolver.rules != rules:
+			resolver.rules.hitzones = rules.hitzones
+		return true
 
 	if cvar_name == CVAR_FRIENDLY_FIRE:
 		rules.friendly_fire = text.to_float() != 0.0
