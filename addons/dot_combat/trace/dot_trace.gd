@@ -117,6 +117,7 @@ func ray(
 		var back := _world_ray(best.point, -direction, best.distance - WALL_RECHECK_MIN)
 		if back.ok():
 			back.blocked = true
+			back.inside_start = true
 			back.distance = best.distance - back.distance
 			best = back
 

@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 331
+const CHECKS := 342
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 28
+const SECTIONS := 31
 
 
 func _ready() -> void:
@@ -47,6 +47,8 @@ func _run() -> void:
 	_test_client_follows_the_server_cvar()
 	_test_manager_walls()
 	_test_muzzle_inside_wall()
+	_test_muzzle_inside_wall_penetration()
+	_test_broken_pane_stays_open()
 	_test_penetration()
 	_test_ricochet_and_sheets()
 	_test_manager_splash()
@@ -1150,6 +1152,110 @@ func _test_muzzle_inside_wall() -> void:
 	remove_child(free_manager)
 	manager.queue_free()
 	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+func _test_muzzle_inside_wall_penetration() -> void:
+	_section("a muzzle inside a wall pays for the wall it is in")
+
+	var trace := InsideBlindTrace.new()
+	trace.floor_y = 0.0
+	trace.add_box(AABB(Vector3(-3.0, 0.0, -5.2), Vector3(6.0, 3.0, 0.4)), &"wood")
+	var manager := _make_manager(trace, DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -9.0))
+	_hitboxes_of(victim).register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var pen := DotPenetration.new()
+	pen.power = 1.0
+	pen.materials = {&"wood": 1.0, &"steel": 10.0}
+	pen.body_cost = 0.1
+
+	var shot := _pen_shot(1, pen)
+	shot.origin = Vector3(0.0, 1.0, -4.9)
+	manager.resolve_shot(shot)
+	_check(shot.penetrations.size() >= 1, "the round leaves the wall it starts in with a record")
+	if shot.penetrations.size() >= 1:
+		_close(float(shot.penetrations[0]["thickness"]), 0.3, "and the thickness is the metres of wall in front of the muzzle", 0.05)
+
+	var thick := InsideBlindTrace.new()
+	thick.floor_y = 0.0
+	thick.add_box(AABB(Vector3(-3.0, 0.0, -5.2), Vector3(6.0, 3.0, 0.4)), &"steel")
+	var stop_manager := _make_manager(thick, DotDamageRules.new())
+	var target := _make_player(Vector3(0.0, 0.0, -9.0))
+	_hitboxes_of(target).register_with(stop_manager, 2)
+	stop_manager.register_health(2, _health_of(target))
+	var stopped := _pen_shot(2, pen)
+	stopped.origin = Vector3(0.0, 1.0, -4.9)
+	stop_manager.resolve_shot(stopped)
+	_check(stopped.damages.is_empty(), "a wall that costs more than the power stops a shot from inside it")
+
+	stop_manager.queue_free()
+	remove_child(stop_manager)
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+class TestPane extends StaticBody3D:
+	var broken := false
+	var hurts := 0
+	func hurt(_amount: float, _point: Vector3, _kind: StringName) -> void:
+		hurts += 1
+		broken = true
+	func is_broken() -> bool:
+		return broken
+
+
+## A world with one pane whose collider outlives its breaking, as a real one can.
+class PaneTrace extends DotTraceFlat:
+	var pane: TestPane
+	var pane_box := AABB(Vector3(-3.0, 0.0, -3.05), Vector3(6.0, 3.0, 0.1))
+	func _world_ray(from: Vector3, direction: Vector3, max_distance: float) -> DotHitbox.Hit:
+		var best := super._world_ray(from, direction, max_distance)
+		if pane.get_rid() in exclude_rids:
+			return best
+		var t := _ray_aabb(from, direction, pane_box, max_distance)
+		if t >= 0.0 and (not best.ok() or t < best.distance):
+			best = _make_hit(from + direction * t, _box_normal(pane_box, from + direction * t), t)
+			best.collider = pane
+		return best
+
+
+func _test_broken_pane_stays_open() -> void:
+	_section("a broken pane whose collider remains does not block")
+
+	var trace := PaneTrace.new()
+	trace.floor_y = 0.0
+	trace.pane = TestPane.new()
+	var manager := _make_manager(trace, DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -8.0))
+	_hitboxes_of(victim).register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var first := _rifle_shot(1, 100, 1)
+	first.origin = Vector3(0.0, 1.0, 0.0)
+	first.direction = Vector3.FORWARD
+	first.tick = 100
+	first.scatter()
+	manager.resolve_shot(first)
+	_check(first.damages.size() == 1, "the shot that breaks the pane carries on to the player behind it")
+	_check(trace.pane.hurts == 1, "and hurts the pane once")
+
+	var second := _rifle_shot(1, 101, 2)
+	second.origin = Vector3(0.0, 1.0, 0.0)
+	second.direction = Vector3.FORWARD
+	second.tick = 101
+	second.scatter()
+	manager.resolve_shot(second)
+	_check(second.damages.size() == 1, "the next shot through the broken pane hits too")
+	_check(trace.pane.hurts == 2, "and hurts it again only on its own pass, not on the reverse ray")
+
+	manager.queue_free()
+	remove_child(manager)
+	trace.pane.free()
 	_clear_players()
 	_done()
 

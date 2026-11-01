@@ -99,6 +99,9 @@ class Hit extends RefCounted:
 	## The physics body of a world hit, so a breakable pane can be hurt; null for a hitbox hit.
 	var collider: Object = null
 
+	## Set on a wall face found by the reverse ray: the muzzle is inside that wall, so the face is its far side and the thickness is the distance from the muzzle.
+	var inside_start: bool = false
+
 	func ok() -> bool:
 		return distance >= 0.0
 

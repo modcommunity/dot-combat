@@ -493,6 +493,12 @@ func _trace_shot(shot: DotShot) -> void:
 
 ## One pellet: walls and (under [member penetration_players]) bodies it passes spend [param pen]'s power, damage falls with what is left.
 func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPenetration, excluded: Array) -> void:
+	var base_rids := trace.exclude_rids
+	_trace_pellet_walk(shot, pellet, type, pen, excluded, base_rids)
+	trace.exclude_rids = base_rids
+
+
+func _trace_pellet_walk(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPenetration, excluded: Array, base_rids: Array[RID]) -> void:
 	var direction: Vector3 = shot.pellets[pellet]
 	var from := shot.origin
 	var remaining := shot.max_range
@@ -503,8 +509,11 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 	var walked := 0.0
 	var bounces := 0
 
+	var skip_rids: Array[RID] = base_rids.duplicate()
+
 	while true:
 		trace.exclude = skip
+		trace.exclude_rids = skip_rids
 		var hit := trace.ray(from, direction, remaining, _set_list)
 
 		if not hit.ok():
@@ -520,6 +529,8 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 				pane.call(&"hurt", shot.damage * config.damage_scale, hit.point, &"bullet")
 				if bool(pane.call(&"is_broken")):
 					skip.append(pane)
+					if pane is CollisionObject3D:
+						skip_rids.append((pane as CollisionObject3D).get_rid())
 					walked += hit.distance
 					from = hit.point + direction * 0.01
 					remaining = shot.max_range - walked
@@ -543,7 +554,9 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 					shot.impacts.append(hit.point)
 					return
 				continue
-			var exit: DotHitbox.Hit = _wall_exit(hit, direction, pen) if can_pass else null
+			var exit: DotHitbox.Hit = null
+			if can_pass:
+				exit = hit if hit.inside_start else _wall_exit(hit, direction, pen)
 			var sheet := false
 			if can_pass and exit == null:
 				exit = _sheet_exit(hit, direction)
@@ -551,19 +564,19 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 			if exit == null:
 				shot.impacts.append(hit.point)
 				return
-			var thickness: float = hit.point.distance_to(exit.point)
+			var thickness: float = hit.point.distance_to(from) if hit.inside_start else hit.point.distance_to(exit.point)
 			power -= pen.wall_cost(thickness, hit.material)
 			if power <= 0.0:
 				shot.impacts.append(hit.point)
 				return
 			shot.penetrations.append({
 				"pellet": pellet, "material": hit.material, "thickness": thickness,
-				"entry": hit.point, "exit": exit.point,
+				"entry": from if hit.inside_start else hit.point, "exit": exit.point,
 				"entry_normal": hit.normal, "exit_normal": exit.normal, "sheet": sheet,
 			})
 			passes += 1
 			walls += 1
-			walked += hit.distance + thickness
+			walked += hit.distance if hit.inside_start else hit.distance + thickness
 			from = exit.point + direction * 0.01
 			remaining = shot.max_range - walked
 			if remaining <= 0.0:
