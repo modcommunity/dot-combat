@@ -126,7 +126,7 @@ var penetration_players: bool = true
 var ricochet_enabled: bool = false
 
 ## Metres a round is taken to cross a one-sided sheet (no far face to find), per material. A material not listed stops the round.
-var sheet_thickness: Dictionary = {&"glass": 0.01, &"wood": 0.05, &"plastic": 0.02, &"cloth": 0.01, &"foliage": 0.02, &"metal": 0.015}
+var sheet_thickness: Dictionary = {&"glass": 0.01, &"wood": 0.05, &"plastic": 0.02, &"cloth": 0.01, &"foliage": 0.02, &"metal": 0.015, &"fence": 0.02}
 
 ## entity id -> [DotHitboxSet].
 var _sets: Dictionary = {}
