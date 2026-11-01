@@ -96,6 +96,9 @@ class Hit extends RefCounted:
 	## Surface material id of a world hit, empty when the backend does not know.
 	var material: StringName = &""
 
+	## The physics body of a world hit, so a breakable pane can be hurt; null for a hitbox hit.
+	var collider: Object = null
+
 	func ok() -> bool:
 		return distance >= 0.0
 

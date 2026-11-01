@@ -514,6 +514,19 @@ func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPene
 		var can_pass := pen != null and passes < pen.max_passes and power > 0.0
 
 		if hit.blocked or hit.entity == null:
+			# A pane (anything with hurt() and is_broken()) takes the shot's damage and lets it through once broken.
+			var pane := hit.collider as Node
+			if pane != null and pane.has_method(&"hurt") and pane.has_method(&"is_broken"):
+				pane.call(&"hurt", shot.damage * config.damage_scale, hit.point, &"bullet")
+				if bool(pane.call(&"is_broken")):
+					skip.append(pane)
+					walked += hit.distance
+					from = hit.point + direction * 0.01
+					remaining = shot.max_range - walked
+					if remaining <= 0.0:
+						shot.impacts.append(from)
+						return
+					continue
 			if _ricochets_off(hit, direction, pen, bounces):
 				var grazing := rad_to_deg(asin(clampf(absf(direction.dot(hit.normal)), 0.0, 1.0)))
 				direction = direction.bounce(hit.normal).normalized()
