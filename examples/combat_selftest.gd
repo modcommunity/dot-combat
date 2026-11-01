@@ -14,7 +14,7 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 342
+const CHECKS := 346
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -1081,6 +1081,23 @@ func _test_penetration() -> void:
 	var stop := _pen_shot(7, pen)
 	manager.resolve_shot(stop)
 	_check(stop.damages.size() == 1, "sv_penetration_players 0 stops at the first body")
+	manager.penetration_players = true
+
+	var rifle_pen := DotPenetration.new()
+	rifle_pen.power = 0.6
+	rifle_pen.body_cost = 0.1
+	var torso_shot := _pen_shot(9, rifle_pen)
+	manager.resolve_shot(torso_shot)
+	_check(torso_shot.damages.size() == 2, "a rifle round (power 0.6) crosses a torso and reaches the second player")
+	var head_shot := _pen_shot(8, rifle_pen)
+	head_shot.origin = Vector3(0.0, 1.7, 0.0)
+	manager.resolve_shot(head_shot)
+	_check(head_shot.damages.size() >= 1 and head_shot.damages[0].hit_group == DotHitGroup.HEAD, "the near player is shot in the head", String(head_shot.damages[0].hit_group) if head_shot.damages.size() >= 1 else "none")
+	_check(head_shot.damages.size() == 1, "a headshot spends the round: nobody behind is hurt")
+
+	var table := DotPenetration.new()
+	table.body_cost = 0.1
+	_check(table.body_cost_of(DotHitGroup.HEAD) > table.body_cost_of(DotHitGroup.CHEST) and table.body_cost_of(DotHitGroup.KNEE) > 0.0, "the default zone table makes a head cost more than a chest")
 	manager.penetration_players = true
 
 	manager.queue_free()

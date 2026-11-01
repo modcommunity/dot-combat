@@ -19,6 +19,7 @@ const LEG := &"leg"
 const NECK := &"neck"
 const HAND := &"hand"
 const FOOT := &"foot"
+const KNEE := &"knee"
 
 ## Used when a hitbox declares no group, and when a trace hits a collider with no
 ## hitboxes at all. Multiplier 1.0 by construction — see [method multiplier].
@@ -37,6 +38,7 @@ static func defaults() -> DotHitGroup:
 	groups.set_multiplier(NECK, 2.0)
 	groups.set_multiplier(HAND, 0.5)
 	groups.set_multiplier(FOOT, 0.5)
+	groups.set_multiplier(KNEE, 0.75)
 	return groups
 
 

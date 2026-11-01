@@ -10,7 +10,7 @@ extends RefCounted
 ## Every zone, head to feet.
 const ZONES: Array[StringName] = [
 	DotHitGroup.HEAD, DotHitGroup.NECK, DotHitGroup.CHEST, DotHitGroup.STOMACH,
-	DotHitGroup.ARM, DotHitGroup.HAND, DotHitGroup.LEG, DotHitGroup.FOOT,
+	DotHitGroup.ARM, DotHitGroup.HAND, DotHitGroup.LEG, DotHitGroup.KNEE, DotHitGroup.FOOT,
 ]
 
 const SIDE_LEFT := &"left"
@@ -30,7 +30,7 @@ static func coarse(zone: StringName) -> StringName:
 			return DotHitGroup.CHEST
 		DotHitGroup.HAND:
 			return DotHitGroup.ARM
-		DotHitGroup.FOOT:
+		DotHitGroup.FOOT, DotHitGroup.KNEE:
 			return DotHitGroup.LEG
 	return zone
 

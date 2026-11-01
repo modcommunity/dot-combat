@@ -4,6 +4,9 @@ extends RefCounted
 ## What one round can pass through: a power in metres of reference material, a resistance per surface material, a
 ## power cost per body. A [DotShot] carries it, so the manager reads nothing off a weapon; dot-weapon builds it from an ammo profile.
 
+## Skull and neck are dense: a head hit costs several times the power of a chest hit, so a rifle round that crosses a torso stops in a head.
+const DEFAULT_BODY_ZONES := {&"head": 8.0, &"neck": 3.0}
+
 ## Metres of resistance-1 material the round can cross at full strength. 0 passes nothing.
 var power: float = 0.0
 ## Resistance per surface material id (power spent per metre of that material).
@@ -15,7 +18,7 @@ var max_depth: float = 1.0
 ## Power spent crossing a body.
 var body_cost: float = 0.0
 ## Per hit-group multiplier on [member body_cost] (a limb costs less than the chest).
-var body_zones: Dictionary = {}
+var body_zones: Dictionary = DEFAULT_BODY_ZONES.duplicate()
 ## Damage never falls below this share of the original after a pass, while power remains.
 var min_damage: float = 0.0
 ## Most walls and bodies one pellet passes.
