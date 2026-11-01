@@ -16,6 +16,9 @@ extends RefCounted
 ## them right independently.
 
 ## Layers world geometry lives on, for backends that have layers.
+## A hit nearer than this is not rechecked against the world, nor is the stretch of the reverse ray that close to the hit.
+const WALL_RECHECK_MIN := 0.02
+
 var collision_mask: int = 1
 
 ## Nodes whose hitboxes are never tested. The shooter, usually.
@@ -106,6 +109,16 @@ func ray(
 
 		best = hit
 		limit = hit.distance
+
+	# The reverse ray: a physics ray that starts inside a wall finds nothing there, so a shooter
+	# pressed into geometry would reach the far side. From the hit back to the muzzle it enters
+	# the wall from outside and cannot miss it.
+	if best.ok() and not best.blocked and best.distance > WALL_RECHECK_MIN:
+		var back := _world_ray(best.point, -direction, best.distance - WALL_RECHECK_MIN)
+		if back.ok():
+			back.blocked = true
+			back.distance = best.distance - back.distance
+			best = back
 
 	if ray_observer.is_valid():
 		ray_observer.call(from, direction, best.distance if best.ok() else max_distance)

@@ -46,6 +46,7 @@ func _run() -> void:
 	_test_team_mate_pass_through_cvar()
 	_test_client_follows_the_server_cvar()
 	_test_manager_walls()
+	_test_muzzle_inside_wall()
 	_test_penetration()
 	_test_ricochet_and_sheets()
 	_test_manager_splash()
@@ -1092,6 +1093,65 @@ class OneSidedTrace extends DotTraceFlat:
 		if direction.z > 0.0:
 			return DotHitbox.Hit.new()
 		return super._world_ray(from, direction, max_distance)
+
+
+## A world ray that finds nothing when it starts inside a box, as a physics ray does.
+class InsideBlindTrace extends DotTraceFlat:
+	func _world_ray(from: Vector3, direction: Vector3, max_distance: float) -> DotHitbox.Hit:
+		for box in boxes:
+			if box.has_point(from):
+				return DotHitbox.Hit.new()
+		return super._world_ray(from, direction, max_distance)
+
+
+func _test_muzzle_inside_wall() -> void:
+	_section("a muzzle inside a wall cannot reach the far side")
+
+	var trace := InsideBlindTrace.new()
+	trace.floor_y = 0.0
+	trace.add_box(AABB(Vector3(-3.0, 0.0, -5.2), Vector3(6.0, 3.0, 0.4)))
+	var manager := _make_manager(trace, DotDamageRules.new())
+	var victim := _make_player(Vector3(0.0, 0.0, -8.0))
+	_hitboxes_of(victim).register_with(manager, 2)
+	manager.register_health(2, _health_of(victim))
+
+	var shot := _rifle_shot(1, 100, 1)
+	shot.origin = Vector3(0.0, 1.0, -5.0)
+	shot.direction = Vector3.FORWARD
+	shot.tick = 100
+	shot.scatter()
+	manager.resolve_shot(shot)
+	_check(shot.damages.is_empty(), "a shot from inside the wall does not hit the player behind it")
+	_close(_health_of(victim).health, 100.0, "and the player is untouched")
+
+	var open := _rifle_shot(1, 101, 2)
+	open.origin = Vector3(0.0, 1.0, 0.0)
+	open.direction = Vector3.BACK * -1.0
+	open.tick = 101
+	open.scatter()
+	manager.resolve_shot(open)
+	_check(open.damages.is_empty(), "the wall still stops a shot from outside")
+
+	var clear := InsideBlindTrace.new()
+	clear.floor_y = 0.0
+	var free_manager := _make_manager(clear, DotDamageRules.new())
+	var target := _make_player(Vector3(0.0, 0.0, -8.0))
+	_hitboxes_of(target).register_with(free_manager, 2)
+	free_manager.register_health(2, _health_of(target))
+	var open_shot := _rifle_shot(1, 102, 1)
+	open_shot.origin = Vector3(0.0, 1.0, 0.0)
+	open_shot.direction = Vector3.FORWARD
+	open_shot.tick = 102
+	open_shot.scatter()
+	free_manager.resolve_shot(open_shot)
+	_check(open_shot.damages.size() == 1, "with no wall the same shot still hits")
+
+	free_manager.queue_free()
+	remove_child(free_manager)
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
 
 
 func _test_ricochet_and_sheets() -> void:
