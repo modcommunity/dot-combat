@@ -76,7 +76,7 @@ extends Resource
 ##
 ## [b]A flag, not a number.[/b] With [member critical_scale] at 1 a critical does exactly
 ## the damage it did before; what changes is [member DotDamage.critical], which is what a
-## game hangs its rewards on — a burst of coins out of the body, a health drop, a meter
+## game hangs its rewards on — a burst of points out of the body, a health drop, a meter
 ## filling, a marker over the victim. The head's own multiplier is still the hit group's.
 @export var critical_headshots: bool = true
 
