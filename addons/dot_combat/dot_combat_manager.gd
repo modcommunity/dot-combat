@@ -153,6 +153,13 @@ var _shots_resolved: int = 0
 var _shots_refused: int = 0
 var _registrations_refused: int = 0
 var _rewinds: int = 0
+var _tracer: DotPelletTracer = null
+var _cvars: DotCombatCvars = null
+
+
+func _init() -> void:
+	_tracer = DotPelletTracer.new(self)
+	_cvars = DotCombatCvars.new(self)
 
 
 func _ready() -> void:
@@ -493,163 +500,7 @@ func _trace_shot(shot: DotShot) -> void:
 
 ## One pellet: walls and (under [member penetration_players]) bodies it passes spend [param pen]'s power, damage falls with what is left.
 func _trace_pellet(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPenetration, excluded: Array) -> void:
-	var base_rids := trace.exclude_rids
-	_trace_pellet_walk(shot, pellet, type, pen, excluded, base_rids)
-	trace.exclude_rids = base_rids
-
-
-func _trace_pellet_walk(shot: DotShot, pellet: int, type: DotDamageType, pen: DotPenetration, excluded: Array, base_rids: Array[RID]) -> void:
-	var direction: Vector3 = shot.pellets[pellet]
-	var from := shot.origin
-	var remaining := shot.max_range
-	var power := pen.power if pen != null else 0.0
-	var passes := 0
-	var walls := 0
-	var skip: Array = excluded.duplicate()
-	var walked := 0.0
-	var bounces := 0
-
-	var skip_rids: Array[RID] = base_rids.duplicate()
-
-	while true:
-		trace.exclude = skip
-		trace.exclude_rids = skip_rids
-		var hit := trace.ray(from, direction, remaining, _set_list)
-
-		if not hit.ok():
-			shot.impacts.append(shot.origin + direction * shot.max_range)
-			return
-
-		var can_pass := pen != null and passes < pen.max_passes and power > 0.0
-
-		if hit.blocked or hit.entity == null:
-			# A pane (anything with hurt() and is_broken()) takes the shot's damage and lets it through once broken.
-			var pane := hit.collider as Node
-			if pane != null and pane.has_method(&"hurt") and pane.has_method(&"is_broken"):
-				pane.call(&"hurt", shot.damage * config.damage_scale, hit.point, &"bullet")
-				if bool(pane.call(&"is_broken")):
-					skip.append(pane)
-					if pane is CollisionObject3D:
-						skip_rids.append((pane as CollisionObject3D).get_rid())
-					walked += hit.distance
-					from = hit.point + direction * 0.01
-					remaining = shot.max_range - walked
-					if remaining <= 0.0:
-						shot.impacts.append(from)
-						return
-					continue
-			if _ricochets_off(hit, direction, pen, bounces):
-				var grazing := rad_to_deg(asin(clampf(absf(direction.dot(hit.normal)), 0.0, 1.0)))
-				direction = direction.bounce(hit.normal).normalized()
-				power *= pen.ricochet_keep
-				bounces += 1
-				shot.ricochets.append({
-					"pellet": pellet, "material": hit.material, "point": hit.point,
-					"normal": hit.normal, "angle": grazing, "direction": direction,
-				})
-				walked += hit.distance
-				from = hit.point + hit.normal * 0.02
-				remaining = shot.max_range - walked
-				if power <= 0.0 or remaining <= 0.0:
-					shot.impacts.append(hit.point)
-					return
-				continue
-			var exit: DotHitbox.Hit = null
-			if can_pass:
-				exit = hit if hit.inside_start else _wall_exit(hit, direction, pen)
-			var sheet := false
-			if can_pass and exit == null:
-				exit = _sheet_exit(hit, direction)
-				sheet = exit != null
-			if exit == null:
-				shot.impacts.append(hit.point)
-				return
-			var thickness: float = hit.point.distance_to(from) if hit.inside_start else hit.point.distance_to(exit.point)
-			power -= pen.wall_cost(thickness, hit.material)
-			if power <= 0.0:
-				shot.impacts.append(hit.point)
-				return
-			shot.penetrations.append({
-				"pellet": pellet, "material": hit.material, "thickness": thickness,
-				"entry": from if hit.inside_start else hit.point, "exit": exit.point,
-				"entry_normal": hit.normal, "exit_normal": exit.normal, "sheet": sheet,
-			})
-			passes += 1
-			walls += 1
-			walked += hit.distance if hit.inside_start else hit.distance + thickness
-			from = exit.point + direction * 0.01
-			remaining = shot.max_range - walked
-			if remaining <= 0.0:
-				shot.impacts.append(from)
-				return
-			continue
-
-		var victim := _entity_id_of(hit.entity)
-
-		if victim == 0:
-			shot.impacts.append(hit.point)
-			return
-
-		var strength := pen.strength(power) if pen != null and (passes > 0 or bounces > 0) else 1.0
-		var damage := DotDamage.make(
-			shot.attacker,
-			victim,
-			shot.damage * config.damage_scale * strength,
-			type
-		)
-		damage.hit_group = hit.group
-		damage.limb = hit.limb
-		DotHitzone.annotate(damage, hit, direction)
-		damage.context["entity"] = hit.entity
-		if passes > 0:
-			damage.context["penetrated"] = passes
-			damage.context["wallbang"] = walls > 0
-		if bounces > 0:
-			damage.context["ricochet"] = bounces
-		damage.point = hit.point
-		damage.direction = direction
-		damage.distance = hit.distance + walked
-		damage.weapon_id = shot.weapon_id
-		damage.tick = shot.tick
-
-		if hit.hitbox != null:
-			damage.scale_by(hit.hitbox.damage_scale, "hitbox")
-
-		shot.damages.append(resolver.resolve(damage))
-
-		if not (can_pass and penetration_players):
-			shot.impacts.append(hit.point)
-			return
-
-		power -= pen.body_cost_of(hit.group if rules.hitzones else DotHitzone.coarse(hit.group))
-		if power <= 0.0:
-			shot.impacts.append(hit.point)
-			return
-
-		var body_set := _set_of(hit.entity)
-		if body_set == null:
-			shot.impacts.append(hit.point)
-			return
-		skip.append(body_set)
-		passes += 1
-		walked += hit.distance
-		from = hit.point + direction * 0.01
-		remaining = shot.max_range - walked
-		if remaining <= 0.0:
-			shot.impacts.append(from)
-			return
-
-
-## The far face of the wall [param hit] is on: a ray from [member DotPenetration.max_depth] beyond it, back, against the world only. Null when there is none (a one-sided sheet, or thicker than the depth).
-func _wall_exit(hit: DotHitbox.Hit, direction: Vector3, pen: DotPenetration) -> DotHitbox.Hit:
-	var far := hit.point + direction * pen.max_depth
-	var saved := trace.exclude
-	trace.exclude = _set_list.duplicate()
-	var back := trace.ray(far, -direction, pen.max_depth, _set_list)
-	trace.exclude = saved
-	if not back.ok() or back.entity != null:
-		return null
-	return back
+	_tracer.trace_pellet(shot, pellet, type, pen, excluded)
 
 
 ## True when [param hit] is a wall this round bounces off: [member ricochet_enabled], a listed material, a shallow enough angle.
@@ -658,20 +509,6 @@ func _ricochets_off(hit: DotHitbox.Hit, direction: Vector3, pen: DotPenetration,
 		return false
 	var grazing := rad_to_deg(asin(clampf(absf(direction.dot(hit.normal)), 0.0, 1.0)))
 	return pen.ricochets(hit.material, grazing)
-
-
-## A far face invented for a one-sided sheet: [member sheet_thickness] of the material beyond the entry, or null when its thickness is not known (then the round stops).
-func _sheet_exit(hit: DotHitbox.Hit, direction: Vector3) -> DotHitbox.Hit:
-	var thickness := float(sheet_thickness.get(hit.material, sheet_thickness.get(String(hit.material), 0.0)))
-	if thickness <= 0.0:
-		return null
-	var out := DotHitbox.Hit.new()
-	out.distance = hit.distance + thickness
-	out.point = hit.point + direction * thickness
-	out.normal = -hit.normal
-	out.material = hit.material
-	out.blocked = true
-	return out
 
 
 func _set_of(entity: Node) -> DotHitboxSet:
@@ -756,59 +593,7 @@ const CVAR_RICOCHET := "sv_ricochet"
 
 ## The cvars [method bind_cvars] registers, as data, for a host that registers them its own way.
 func cvar_specs() -> Array[Dictionary]:
-	var level := rules.pass_through_level() if rules != null else DotDamageRules.PASS_THROUGH_AT_MUZZLE
-	var out: Array[Dictionary] = [
-		{
-			"name": CVAR_TEAMMATE_PASSTHROUGH,
-			"value": str(level),
-			"description": "Shots and team-mates: 0 a team-mate is hit and blocks the shot, 1 a shot passes through a team-mate standing at the muzzle, 2 shots pass through every team-mate in the line",
-			"min": float(DotDamageRules.PASS_THROUGH_NONE),
-			"max": float(DotDamageRules.PASS_THROUGH_ALWAYS),
-		},
-		{
-			"name": CVAR_FRIENDLY_FIRE,
-			"value": "1" if rules != null and rules.friendly_fire else "0",
-			"description": "Friendly fire: 1 a shooter can damage a team-mate, 0 team-mates are immune to each other",
-			"min": 0.0,
-			"max": 1.0,
-		},
-		{
-			"name": CVAR_HITZONES,
-			"value": "1" if rules != null and rules.hitzones else "0",
-			"description": "Hit zones: 1 neck, hands and feet have their own damage multipliers, 0 they count as chest, arm and leg",
-			"min": 0.0,
-			"max": 1.0,
-		},
-		{
-			"name": CVAR_PENETRATION,
-			"value": "1" if penetration_enabled else "0",
-			"description": "Bullet penetration: 1 rounds with an ammo profile pass walls and bodies, 0 every wall stops them",
-			"min": 0.0,
-			"max": 1.0,
-		},
-		{
-			"name": CVAR_PENETRATION_SCALE,
-			"value": str(penetration_scale),
-			"description": "Multiplier on every round's penetration power",
-			"min": 0.0,
-			"max": 10.0,
-		},
-		{
-			"name": CVAR_PENETRATION_PLAYERS,
-			"value": "1" if penetration_players else "0",
-			"description": "1 a round passes through a player and can hurt the one behind, 0 a player stops it",
-			"min": 0.0,
-			"max": 1.0,
-		},
-		{
-			"name": CVAR_RICOCHET,
-			"value": "1" if ricochet_enabled else "0",
-			"description": "Ricochet: 1 shallow hits on the hard materials an ammo profile lists bounce on, 0 they stop or pass as before",
-			"min": 0.0,
-			"max": 1.0,
-		},
-	]
-	return out
+	return _cvars.specs()
 
 
 ## Registers this manager's server cvars through [param add] and keeps [member rules] in
@@ -861,63 +646,7 @@ func bind_cvars(add: Callable, flags: int = 0) -> Array:
 ## Applies one of [method cvar_specs]' cvars by name. Returns false for a name that is not
 ## this manager's or a value that is not a number.
 func set_cvar(cvar_name: String, value: String) -> bool:
-	if cvar_name in [CVAR_PENETRATION, CVAR_PENETRATION_SCALE, CVAR_PENETRATION_PLAYERS, CVAR_RICOCHET]:
-		return _set_penetration_cvar(cvar_name, value)
-	if cvar_name != CVAR_TEAMMATE_PASSTHROUGH and cvar_name != CVAR_FRIENDLY_FIRE and cvar_name != CVAR_HITZONES:
-		return false
-
-	var text := value.strip_edges().to_lower()
-	if (cvar_name == CVAR_FRIENDLY_FIRE or cvar_name == CVAR_HITZONES) and text in ["true", "false"]:
-		text = "1" if text == "true" else "0"
-
-	if not text.is_valid_float():
-		DotLog.warn(CHANNEL, "cvar is not a number; left as it was", {"cvar": cvar_name, "value": value})
-		return false
-
-	if rules == null:
-		rules = DotDamageRules.new()
-
-	if cvar_name == CVAR_HITZONES:
-		rules.hitzones = text.to_float() != 0.0
-		if resolver != null and resolver.rules != null and resolver.rules != rules:
-			resolver.rules.hitzones = rules.hitzones
-		return true
-
-	if cvar_name == CVAR_FRIENDLY_FIRE:
-		rules.friendly_fire = text.to_float() != 0.0
-		if resolver != null and resolver.rules != null and resolver.rules != rules:
-			resolver.rules.friendly_fire = rules.friendly_fire
-		DotLog.debug(CHANNEL, "friendly fire set", {"on": rules.friendly_fire})
-		return true
-
-	rules.set_pass_through_level(roundi(text.to_float()))
-
-	# One object in practice (setup() hands the resolver this one), but a game that
-	# assigned the resolver its own after setup would otherwise keep the old rule there.
-	if resolver != null and resolver.rules != null and resolver.rules != rules:
-		resolver.rules.set_pass_through_level(rules.pass_through_level())
-
-	DotLog.debug(CHANNEL, "team-mate pass-through set", {"level": rules.pass_through_level()})
-	return true
-
-
-func _set_penetration_cvar(cvar_name: String, value: String) -> bool:
-	var text := value.strip_edges().to_lower()
-	if text in ["true", "false"]:
-		text = "1" if text == "true" else "0"
-	if not text.is_valid_float():
-		DotLog.warn(CHANNEL, "cvar is not a number; left as it was", {"cvar": cvar_name, "value": value})
-		return false
-	var number := text.to_float()
-	if cvar_name == CVAR_PENETRATION:
-		penetration_enabled = number != 0.0
-	elif cvar_name == CVAR_PENETRATION_PLAYERS:
-		penetration_players = number != 0.0
-	elif cvar_name == CVAR_RICOCHET:
-		ricochet_enabled = number != 0.0
-	else:
-		penetration_scale = maxf(0.0, number)
-	return true
+	return _cvars.apply(cvar_name, value)
 
 
 func _on_cvar_changed(_old: String, new_value: String, cvar_name: String) -> void:

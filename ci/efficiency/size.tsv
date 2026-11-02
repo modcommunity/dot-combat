@@ -1,7 +1,7 @@
 # size
 # Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
-addons/dot_combat/dot_combat_manager.gd	936
-examples/combat_selftest.gd	1491
+addons/dot_combat/dot_combat_manager.gd	935
+examples/combat_selftest.gd	1374
 examples/combat_selftest.gd::_test_lag_compensation	85
 examples/combat_selftest.gd::_test_manager_hitscan	81
 examples/combat_selftest.gd::_test_muzzle_inside_body	101
