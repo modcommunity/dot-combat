@@ -14,13 +14,13 @@ extends "res://examples/selftest/support_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 349
+const CHECKS := 357
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 31
+const SECTIONS := 32
 
 
 func _ready() -> void:
@@ -52,6 +52,7 @@ func _run() -> void:
 	_test_penetration()
 	_test_ricochet_and_sheets()
 	_test_manager_splash()
+	_test_explosion_cover()
 	_test_manager_validation()
 	_test_lag_compensation()
 	_test_net_sync()
@@ -1518,6 +1519,54 @@ func _test_manager_splash() -> void:
 	remove_child(manager)
 	manager2.queue_free()
 	remove_child(manager2)
+	_clear_players()
+	_done()
+
+
+func _test_explosion_cover() -> void:
+	_section("explosions: walls and fences")
+
+	var trace := DotTraceFlat.with_floor(0.0)
+	trace.add_box(AABB(Vector3(2.0, 0.0, -12.0), Vector3(0.4, 3.0, 4.0)), &"concrete")
+	trace.add_box(AABB(Vector3(-2.0, 0.0, -12.0), Vector3(0.02, 3.0, 4.0)), &"fence")
+	var manager := _make_manager(trace, DotDamageRules.new())
+	var centre := Vector3(0.0, 1.0, -10.0)
+
+	var open := _make_player(Vector3(0.0, 0.0, -13.0))
+	var walled := _make_player(Vector3(4.0, 0.0, -10.0))
+	var fenced := _make_player(Vector3(-4.0, 0.0, -10.0))
+	var in_open := _make_player(Vector3(0.0, 0.0, -7.0))
+	var players := [open, walled, fenced, in_open]
+	for i in players.size():
+		_hitboxes_of(players[i]).register_with(manager, 10 + i)
+		manager.register_health(10 + i, _health_of(players[i]))
+
+	var out := manager.explode(centre, 6.0, 100.0, 1)
+	_check(_health_of(open).health < 100.0, "an explosion hurts a player in the open", str(_health_of(open).health))
+	_check(_health_of(in_open).health < 100.0, "and one the same distance on the other side")
+	_close(_health_of(open).health, _health_of(in_open).health, "equal distance, equal damage", 0.5)
+	_close(_health_of(walled).health, 100.0, "a player the same distance behind a solid wall takes nothing")
+	_check(out.size() == 2, "and is not even in the damage list", str(out.size()))
+
+	# The design: splash needs a clear line, any solid world hit blocks it (DotTrace.line_of_sight), fences included.
+	# Only a shot's own pellets are penetration-aware (sheet_thickness), splash is not.
+	_close(_health_of(fenced).health, 100.0, "a thin fence blocks splash entirely: splash does not use penetration")
+
+	var rocket_type := DotDamageType.make(&"blast")
+	rocket_type.uses_hit_groups = false
+	rocket_type.armour_share = 0.0
+	var shot := _rocket_shot(rocket_type, 1, 300, 1)
+	shot.origin = Vector3(0.0, 2.0, -10.0)
+	shot.direction = Vector3.DOWN
+	shot.tick = 300
+	shot.scatter()
+	var before := _health_of(in_open).health
+	manager.resolve_shot(shot)
+	_check(_health_of(in_open).health < before, "a rocket's splash reaches the player in the open", str(_health_of(in_open).health))
+	_close(_health_of(walled).health, 100.0, "and is shielded by the same wall")
+
+	manager.queue_free()
+	remove_child(manager)
 	_clear_players()
 	_done()
 
