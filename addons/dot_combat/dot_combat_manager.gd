@@ -621,7 +621,7 @@ func _trace_pellet_walk(shot: DotShot, pellet: int, type: DotDamageType, pen: Do
 			shot.impacts.append(hit.point)
 			return
 
-		power -= pen.body_cost_of(hit.group)
+		power -= pen.body_cost_of(hit.group if rules.hitzones else DotHitzone.coarse(hit.group))
 		if power <= 0.0:
 			shot.impacts.append(hit.point)
 			return

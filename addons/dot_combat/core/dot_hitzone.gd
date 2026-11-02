@@ -26,7 +26,7 @@ const CONTEXT_SIDE := &"hit_side"
 ## The classic group a fine zone folds into when zones are off.
 static func coarse(zone: StringName) -> StringName:
 	match zone:
-		DotHitGroup.NECK:
+		DotHitGroup.NECK, DotHitGroup.STOMACH:
 			return DotHitGroup.CHEST
 		DotHitGroup.HAND:
 			return DotHitGroup.ARM

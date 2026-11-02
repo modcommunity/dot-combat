@@ -368,10 +368,22 @@ func _test_hitzones() -> void:
 	var leg_off := _zone_shot(manager, 3, Vector3(0.0, 0.05, 0.0))
 	var leg_ref := _zone_shot(manager, 4, Vector3(0.0, 0.5, 0.0))
 	_close(leg_off.amount, leg_ref.amount, "zones off: the foot counts as leg")
+	var belly := DotHitbox.new()
+	belly.group = DotHitGroup.STOMACH
+	belly.shape = DotHitbox.Shape.SPHERE
+	belly.radius = 0.3
+	belly.position = Vector3(0.0, 0.7, 0.0)
+	belly.precedence = 20
+	set_node.add_child(belly)
+	set_node.refresh()
+	var belly_off := _zone_shot(manager, 20, Vector3(0.0, 0.7, 0.0))
+	_check(belly_off.hit_group == DotHitGroup.STOMACH, "a stomach box reports the stomach zone", str(belly_off.hit_group))
+	_close(belly_off.amount, base, "zones off: the stomach counts as chest, no x1.25")
 
 	_check(manager.set_cvar(DotCombatManager.CVAR_HITZONES, "1") and rules.hitzones, "mp_hitzones turns zones on")
 	_close(_zone_shot(manager, 5, Vector3(0.0, 1.45, 0.0)).amount, base * 2.0, "zones on: neck takes its own multiplier")
 	_close(_zone_shot(manager, 6, Vector3(0.0, 0.05, 0.0)).amount, leg_ref.amount * 0.5 / 0.75, "zones on: foot takes its own multiplier")
+	_close(_zone_shot(manager, 21, Vector3(0.0, 0.7, 0.0)).amount, base * 1.25, "zones on: the stomach takes its own multiplier")
 
 	var data := manager.resolver.hit_groups.apply_dict({"neck": 3.0, "hand": "x", "bogus_zone": 0.1})
 	_check(data == 2 and is_equal_approx(manager.resolver.hit_groups.multiplier(&"neck"), 3.0), "data overrides multipliers and skips non-numbers")

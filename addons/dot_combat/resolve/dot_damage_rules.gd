@@ -67,7 +67,7 @@ extends Resource
 ## and what an explosion always wants — see [member DotDamageType.uses_hit_groups].
 @export var hit_groups: bool = true
 
-## Whether neck, hand and foot are zones of their own. Off folds them into chest, arm and leg ([DotHitzone.coarse]). Cvar `mp_hitzones`.
+## Whether neck, stomach, hand, knee and foot are zones of their own. Off folds them into chest, arm and leg ([DotHitzone.coarse]). Cvar `mp_hitzones`.
 @export var hitzones: bool = false
 
 @export_group("Criticals")
