@@ -408,13 +408,8 @@ func _test_manager_walls() -> void:
 	_done()
 
 
-## A hitbox surface at exactly the same distance as a wall face.
-##
-## Not a contrived case: it is a player hugging cover, and it is the one the tie-break
-## in [method DotTrace.ray] exists for. Giving the tie to the hitbox is how someone
-## gets shot through the wall they are pressed against, and the numbers here are
-## chosen so both distances come out as exactly 9.0 rather than as two values that
-## happen to be close.
+## A hitbox surface at exactly the same distance as a wall face: a player hugging cover, the case the tie-break in [method DotTrace.ray] exists for.
+## The numbers make both distances exactly 9.0, not two close values, so the tie is real.
 func _test_cover_tie() -> void:
 	var trace := DotTraceFlat.new()
 	trace.add_box(AABB(Vector3(-3.0, -3.0, -9.4), Vector3(6.0, 6.0, 0.4)))
