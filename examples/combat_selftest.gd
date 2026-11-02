@@ -187,6 +187,14 @@ func _test_health() -> void:
 	_close(health.health, 100.0, "at full health")
 	_close(health.armour, 0.0, "with no armour")
 
+	_health_timed(health, type)
+
+	health.queue_free()
+	remove_child(health)
+	_done()
+
+
+func _health_timed(health: DotHealth, type: DotDamageType) -> void:
 	# Spawn protection, which is counted in ticks so a replay reaches the same answer.
 	health.spawn_protection_ticks = 60
 	health.reset(1000)
@@ -230,9 +238,6 @@ func _test_health() -> void:
 	health.tick(3100, 1.0)
 	_close(health.health, 60.0, "then restores at its stated rate")
 
-	health.queue_free()
-	remove_child(health)
-	_done()
 
 
 # --- Spread ----------------------------------------------------------------
@@ -303,6 +308,11 @@ func _test_spread_determinism() -> void:
 		str(quadrants)
 	)
 
+	_spread_poles_and_fixed(forward)
+	_done()
+
+
+func _spread_poles_and_fixed(forward: Vector3) -> void:
 	# Straight up is the case a fixed up-vector basis gets wrong: every shot fired at
 	# the sky comes out along one line.
 	var up_a := DotSpread.cone(Vector3.UP, 4.0, 1, 1, 1, 0)
@@ -319,7 +329,7 @@ func _test_spread_determinism() -> void:
 	_check(centre == forward, "a fixed pattern has a centre pellet")
 	var ring := DotSpread.fixed_cone(forward, 5.0, 4, 9)
 	_close(rad_to_deg(forward.angle_to(ring)), 5.0, "and puts the rest on the ring")
-	_done()
+
 
 
 # --- Hitboxes --------------------------------------------------------------
@@ -383,6 +393,14 @@ func _test_hitbox_geometry() -> void:
 	)
 	_check(not over.ok(), "but not above it")
 
+	_hitbox_transforms(holder, sphere, capsule)
+
+	holder.queue_free()
+	remove_child(holder)
+	_done()
+
+
+func _hitbox_transforms(holder: Node3D, sphere: DotHitbox, capsule: DotHitbox) -> void:
 	# A rotated hitbox must be hit where it actually is, not where its untransformed
 	# shape would be. Animated limbs are rotated constantly.
 	capsule.rotation_degrees = Vector3(90.0, 0.0, 0.0)
@@ -417,9 +435,6 @@ func _test_hitbox_geometry() -> void:
 		"and misses when it is out of reach"
 	)
 
-	holder.queue_free()
-	remove_child(holder)
-	_done()
 
 
 func _test_hitbox_precedence() -> void:
@@ -615,6 +630,11 @@ func _test_resolver_rules() -> void:
 	resolver.resolve(rocket_jump)
 	_close(rocket_jump.amount, 25.0, "self damage on applies the type's own scale")
 
+	_resolver_clamps_and_hook(rules, resolver, type)
+	_done()
+
+
+func _resolver_clamps_and_hook(rules: DotDamageRules, resolver: DotDamageResolver, type: DotDamageType) -> void:
 	# Hit groups and falloff compose, and the clamp is last.
 	rules.maximum = 100.0
 	var headshot := DotDamage.make(1, 3, 50.0, type)
@@ -651,7 +671,7 @@ func _test_resolver_rules() -> void:
 	resolver.resolve(vetoed)
 	_check(vetoed.refused and vetoed.refusal == "test hook", "and a hook can veto")
 	resolver.adjust = Callable()
-	_done()
+
 
 
 # --- Manager ---------------------------------------------------------------
@@ -1637,6 +1657,14 @@ func _test_manager_validation() -> void:
 	manager.resolve_shot(posthumous)
 	_check(posthumous.damages.is_empty(), "a dead player's shots are refused")
 
+	_validation_client_instance(manager)
+	manager.queue_free()
+	remove_child(manager)
+	_clear_players()
+	_done()
+
+
+func _validation_client_instance(manager: DotCombatManager) -> void:
 	# A client instance traces but never applies damage.
 	var client := _make_manager(DotTraceFlat.with_floor(0.0), DotDamageRules.new())
 	client.is_authority = false
@@ -1656,13 +1684,9 @@ func _test_manager_validation() -> void:
 		100.0,
 		"but never applies damage"
 	)
-
-	manager.queue_free()
-	remove_child(manager)
 	client.queue_free()
 	remove_child(client)
-	_clear_players()
-	_done()
+
 
 
 func _test_lag_compensation() -> void:
