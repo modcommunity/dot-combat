@@ -161,3 +161,52 @@ func _test_damage_immunity() -> void:
 	_check(not res.resolve(DotDamage.make(0, 5, 30.0, bullet)).refused, "the same victim still takes another kind")
 	_check(not res.resolve(DotDamage.make(0, 6, 30.0, fall)).refused, "another victim still takes it")
 	_done()
+
+
+# --- Space-query audit -----------------------------------------------------
+
+## Every file under the addon that asks the physics space a question, found by grep. A new
+## one fails here until it is added to [constant QUERY_FILES] and to dot-physics docs/threading.md (a different repo, so not read here), so the
+## list of callers that must run inside a physics step cannot go stale.
+const QUERY_FILES: Array[String] = ["core/dot_sentry.gd", "trace/dot_trace_physics.gd"]
+const QUERY_NEEDLES: Array[String] = ["direct_space_state", "space.intersect_", "space.cast_motion(", "space.get_rest_info("]
+const TICK_ENTRY_NEEDLES: Array[String] = ["func _process(", "func _input(", "func _unhandled_input(", "call_deferred(", "await "]
+
+
+func _audit_scripts(dir: String, out: Array[String]) -> void:
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".gd"):
+			out.append(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_audit_scripts(dir.path_join(d), out)
+
+
+func _test_space_query_audit() -> void:
+	_section("space-query audit")
+	var scripts: Array[String] = []
+	_audit_scripts("res://addons/dot_combat", scripts)
+	var found: Array[String] = []
+	var in_tick_entry: Array[String] = []
+
+	for path in scripts:
+		var text := FileAccess.get_file_as_string(path)
+		var queries := false
+		for n in QUERY_NEEDLES:
+			if text.contains(n):
+				queries = true
+		if not queries:
+			continue
+		var rel := path.trim_prefix("res://addons/dot_combat/")
+		found.append(rel)
+		for n in TICK_ENTRY_NEEDLES:
+			if text.contains(n):
+				in_tick_entry.append("%s: %s" % [rel, n])
+
+	found.sort()
+	var expected := QUERY_FILES.duplicate()
+	expected.sort()
+	_check(scripts.size() > 5, "the audit found the addon's scripts")
+	_check(found == expected, "the files that query the space are exactly the documented ones", "found %s" % [found])
+	_check(in_tick_entry.is_empty(), "no querying file has a frame, input, deferred or awaited entry point", str(in_tick_entry))
+
+	_done()
