@@ -33,8 +33,7 @@ signal limb_hit(entity: Node, limb: StringName, point: Vector3, amount: float, i
 
 ## Whether this instance applies damage.
 ##
-## A client instance still traces (hit markers, effects) but never touches a [DotHealth]:
-## predicted damage shows kills that did not happen.
+## A client still traces (hit markers, effects) but never touches a [DotHealth].
 @export var is_authority: bool = true
 
 ## Registers under [code]dot_combat[/code], or under a scoped name when set. Two
@@ -86,11 +85,7 @@ var restore_fn: Callable = Callable()
 
 ## Whether a shot passes through an entity whose hitboxes already hold its muzzle.
 ## Signature: [code]func(shot: DotShot, set_node: DotHitboxSet, entity_id: int) -> bool[/code].
-##
-## Asked only for sets that contain [member DotShot.origin]. Unset,
-## [member DotDamageRules.pass_through_team_mate_at_muzzle] decides; assign for non-team
-## overlap (a passenger in a vehicle). Replaces the muzzle rule only:
-## [member DotDamageRules.pass_through_team_mates] still lets every team-mate through.
+## Asked only for sets containing the origin; unset, the rules decide. Replaces the muzzle rule only.
 var pass_through_fn: Callable = Callable()
 
 ## Master switch for shots that carry a [DotPenetration] (`sv_penetration`).

@@ -2,10 +2,8 @@ class_name DotHitzone
 extends RefCounted
 
 ## Body zones finer than the five classic hit groups, and which side of the body a shot landed on.
-##
-## A zone is a [DotHitGroup] name on a [DotHitbox]. With [member DotDamageRules.hitzones] off (cvar
-## `mp_hitzones` 0, the default) the resolver folds a fine zone back to its coarse group, so a game that
-## tags hands and feet changes no damage until an operator turns zones on. Stats always see the fine zone.
+## A zone is a [DotHitGroup] name on a [DotHitbox]. With [member DotDamageRules.hitzones] off (`mp_hitzones`
+## 0, the default) the resolver folds a fine zone back to its coarse group; stats always see the fine zone.
 
 ## Every zone, head to feet.
 const ZONES: Array[StringName] = [

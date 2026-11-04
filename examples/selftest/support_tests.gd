@@ -163,11 +163,8 @@ func _test_damage_immunity() -> void:
 	_done()
 
 
-# --- Space-query audit -----------------------------------------------------
-
-## Every file under the addon that asks the physics space a question, found by grep. A new
-## one fails here until it is added to [constant QUERY_FILES] and to dot-physics docs/threading.md (a different repo, so not read here), so the
-## list of callers that must run inside a physics step cannot go stale.
+## Every addon file that asks the physics space a question. A new one fails here until it is in
+## [constant QUERY_FILES] and dot-physics docs/threading.md, so the list of in-step callers cannot go stale.
 const QUERY_FILES: Array[String] = ["core/dot_sentry.gd", "trace/dot_trace_physics.gd"]
 const QUERY_NEEDLES: Array[String] = ["direct_space_state", "space.intersect_", "space.cast_motion(", "space.get_rest_info("]
 const TICK_ENTRY_NEEDLES: Array[String] = ["func _process(", "func _input(", "func _unhandled_input(", "call_deferred(", "await "]
