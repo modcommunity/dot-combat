@@ -101,7 +101,7 @@ done
 godot --headless --path . res://examples/combat_selftest.tscn
 ```
 
-141 checks, all offline. Exits non-zero on any failure.
+357 checks, all offline. Exits non-zero on any failure.
 
 ## Licence
 
