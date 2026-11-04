@@ -30,7 +30,7 @@ Read the family [CLAUDE.md](../../CLAUDE.md) first; this file is only what is sp
 | `trace/` | `DotTrace` (world ray plus hitboxes; `material_fn(collider)` names a body's material, `material_shape_fn(collider, shape)` a box of a many-box body, asked first), `DotTracePhysics` (world via the physics server), `DotTraceFlat` (analytic boxes and a ground plane) |
 | `resolve/` | `DotDamageResolver`, `DotDamageRules`: teams, friendly fire, falloff, criticals; `DotDamageImmunity` (per-entity damage kinds ignored, set from a class profile, none by default) |
 | `net/dot_combat_net_sync.gd` | `DotCombatNetSync`: health, armour and alive as data specs |
-| `dot_combat_manager.gd`, `dot_pellet_tracer.gd`, `dot_combat_cvars.gd` | `DotCombatManager`: trace, rewind, resolve, apply; `DotPelletTracer` (pellet walk through walls, panes, ricochets, bodies) and `DotCombatCvars` (cvar table and writes) are its helpers, held by composition |
+| `dot_combat_base.gd`, `dot_combat_manager.gd`, `dot_pellet_tracer.gd`, `dot_combat_cvars.gd` | `DotCombatManager` (extends `DotCombatBase`: exports, signals, registration, damage types): trace, rewind, resolve, apply; `DotPelletTracer` (pellet walk through walls, panes, ricochets, bodies) and `DotCombatCvars` (cvar table and writes) are its helpers, held by composition |
 | `dot_combat_config.gd` | `DotCombatConfig`: rate limits, `max_origin_error`, lag compensation |
 | `examples/combat_selftest.tscn` | the suite, all offline |
 
