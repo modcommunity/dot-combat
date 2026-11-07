@@ -38,7 +38,7 @@ Paths except `examples/` are in `addons/dot_combat/`.
 
 ## Running and testing
 
-The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/combat_selftest.tscn` (exits non-zero on any failure). Run it after any change to the trace, the resolver or the manager: several checks exist because the obvious implementation is wrong (the wall tie, the leaked rewind, the zero-team truce, the point-blank ray, the team-mate at the muzzle, the pass-through cvar read back on bind, a client following the server's level).
+The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), then `godot --headless --path . res://examples/combat_selftest.tscn` (exits non-zero on any failure). Run it after any change to the trace, the resolver or the manager: several checks exist because the obvious implementation is wrong (the wall tie, the leaked rewind, the zero-team truce, the point-blank ray, the team-mate at the muzzle, the pass-through cvar read back on bind, a client following the server's level).
 
 ## Rules that bite
 
