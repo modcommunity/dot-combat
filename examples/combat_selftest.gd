@@ -14,7 +14,7 @@ extends "res://examples/selftest/prefilter_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 365
+const CHECKS := 366
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
