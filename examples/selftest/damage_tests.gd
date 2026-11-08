@@ -67,6 +67,9 @@ func _test_limbs() -> void:
 	var untagged := DotHitbox.new()
 	_check(untagged.limb == &"", "an untagged hitbox has no limb")
 	_check(sink.calls.size() == 2, "the sink saw exactly the counted hits")
+	var tagged_shot := DotShot.make(&"rifle", 1, 1, 0)
+	tagged_shot.set_meta(&"quickscope", true)
+	_check(tagged_shot.describe()["meta"].get(&"quickscope", false) == true and DotShot.make(&"x", 1, 1, 0).describe()["meta"].is_empty(), "describe carries the shooter's shot meta")
 	_check(untagged.describe().has("limb"), "describe names the limb")
 	untagged.free()
 

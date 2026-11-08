@@ -177,7 +177,11 @@ func hit_anyone() -> bool:
 	return false
 
 
+## Describes the shot; whatever the shooter tagged it with (`ads_progress`, `quickscope`, ...) rides along under `meta`.
 func describe() -> Dictionary:
+	var meta := {}
+	for key in get_meta_list():
+		meta[key] = get_meta(key)
 	return {
 		"weapon": String(weapon_id),
 		"attacker": attacker,
@@ -189,6 +193,7 @@ func describe() -> Dictionary:
 		"damage": total_damage(),
 		"deferred": deferred,
 		"replayed": replayed,
+		"meta": meta,
 	}
 
 
