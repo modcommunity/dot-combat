@@ -87,6 +87,17 @@ func ray(
 			continue
 
 		# The bounds first: a few hundred bodies a shot, nearly all of them nowhere near the line.
+		# The sphere test of DotHitboxSet._ray_hits_bounds inline, same arithmetic: a call per set is most of the cost of a miss.
+		var offset := from - set_node.global_transform * set_node.bounds_offset
+		var along := offset.dot(direction)
+		var gap := offset.length_squared() - set_node.bounds_radius * set_node.bounds_radius
+		if gap > 0.0:
+			if along > 0.0:
+				continue
+			var depth := along * along - gap
+			if depth < 0.0 or -along - sqrt(depth) > limit:
+				continue
+
 		if not set_node.may_be_hit(from, direction, limit):
 			continue
 

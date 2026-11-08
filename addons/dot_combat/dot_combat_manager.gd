@@ -288,12 +288,20 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 	if not pass_through_fn.is_valid() and not everywhere and (not use_rule or resolver == null):
 		return out
 
+	var muzzle := shot.origin
+
 	for set_node in _set_list:
 		if set_node == null or not is_instance_valid(set_node):
 			continue
 
 		# Without the broad rule only a body holding the muzzle can pass: ask that first, it is cheap.
-		if not everywhere and not set_node.contains_point(shot.origin):
+		# The bounds sphere of contains_point inline, same arithmetic: nearly every body is far from the muzzle,
+		# and only a near one is asked the exact question (once, whichever branch needs it).
+		var holds := false
+		if not (set_node.global_transform * set_node.bounds_offset).distance_to(muzzle) > set_node.bounds_radius:
+			holds = set_node.contains_point(muzzle)
+
+		if not everywhere and not holds:
 			continue
 
 		var entity_id := _entity_id_of(set_node.entity_owner())
@@ -307,7 +315,7 @@ func pass_through_sets(shot: DotShot) -> Array[DotHitboxSet]:
 
 		if everywhere and resolver.are_team_mates(shot.attacker, entity_id):
 			passes = true
-		elif everywhere and not set_node.contains_point(shot.origin):
+		elif everywhere and not holds:
 			continue
 		elif pass_through_fn.is_valid():
 			passes = bool(pass_through_fn.call(shot, set_node, entity_id))
