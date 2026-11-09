@@ -82,3 +82,33 @@ func describe_lines() -> PackedStringArray:
 	for name_str in names():
 		out.append("  %-10s x%.2f" % [name_str, multiplier(StringName(name_str))])
 	return out
+
+
+## The zones a server may tune, each with the cvar suffix it is set by: `<prefix>_head_mult` and so on.
+const TUNABLE := {&"head": "head_mult", &"neck": "neck_mult", &"stomach": "stomach_mult", &"leg": "leg_mult"}
+
+
+## Registers one server cvar per [constant TUNABLE] zone through [param add] ([code](name, default, description, flags) -> cvar[/code]), named `<prefix>_head_mult` and so on, and follows them live. The default is the multiplier this table holds now.
+func bind_cvars(add: Callable, prefix: String, flags: int = 0) -> Array:
+	var made: Array = []
+
+	for group: StringName in TUNABLE:
+		var name := "%s_%s" % [prefix, TUNABLE[group]]
+		var help := "Damage multiplier on a %s hit (default %s)" % [group, str(multiplier(group))]
+		var cv: Variant = add.call(name, str(multiplier(group)), help, flags)
+
+		if not (cv is Object) or cv == null:
+			continue
+
+		var obj := cv as Object
+
+		if obj.has_method(&"with_min"):
+			obj.call(&"with_min", 0.0)
+
+		if obj.has_signal(&"changed"):
+			obj.connect(&"changed", func(_old: Variant, new_value: Variant) -> void:
+				set_multiplier(group, str(new_value).to_float()))
+
+		made.append(obj)
+
+	return made

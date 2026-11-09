@@ -14,7 +14,7 @@ extends "res://examples/selftest/prefilter_tests.gd"
 ## re-ran it, a rewind that is never restored, and a client-reported muzzle that is
 ## taken at its word.
 
-const CHECKS := 366
+const CHECKS := 369
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -128,7 +128,27 @@ func _test_hit_groups() -> void:
 	# full damage is survivable; a typo costing none is a weapon that does nothing.
 	_close(groups.multiplier(&"tail"), 1.0, "an unknown group does normal damage")
 	_check(not groups.has(&"tail"), "an unknown group is still reported as unknown")
+
+	# The server cvars: named by the game's prefix, defaulting to the table's number, and moving it when set.
+	var made := {}
+	var cvars := groups.bind_cvars(func(name: String, value: String, _help: String, _flags: int) -> Object:
+		var cv := FakeCvar.new()
+		made[name] = [cv, value]
+		return cv, "t", 0)
+	_check(cvars.size() == 4 and made.has("t_head_mult") and made["t_head_mult"][1] == "4.0", "hit zone cvars carry the prefix and the table's default")
+	(made["t_head_mult"][0] as FakeCvar).changed.emit("4.0", "6")
+	(made["t_leg_mult"][0] as FakeCvar).changed.emit("0.75", "-3")
+	_close(groups.multiplier(DotHitGroup.HEAD), 6.0, "a changed cvar sets the head multiplier")
+	_close(groups.multiplier(DotHitGroup.LEG), 0.0, "and never below zero")
 	_done()
+
+
+## A stand-in for a console variable: the signal and the clamp call the binding uses.
+class FakeCvar extends RefCounted:
+	signal changed(old_value: String, new_value: String)
+
+	func with_min(_v: float) -> FakeCvar:
+		return self
 
 
 # --- Health ----------------------------------------------------------------
