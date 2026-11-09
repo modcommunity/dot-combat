@@ -14,5 +14,6 @@ extends RefCounted
 #    bind_cvars() and set_cvar() (the mp_teammate_passthrough server cvar).
 # 4: DotCombatManager.follow_cvars() (a client keeps the server's replicated cvars).
 # 5: DotSentry (a deployable auto-turret: target choice, ammo, lifetime, placement check).
-const LEVEL := 5
+# 6: DotHitGroup.bind_cvars (the head, neck, stomach and leg multipliers as server cvars).
+const LEVEL := 6
 const OLDEST := 1
