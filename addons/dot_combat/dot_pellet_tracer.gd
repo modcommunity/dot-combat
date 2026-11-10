@@ -105,7 +105,7 @@ func _step_world(hit: DotHitbox.Hit, can_pass: bool) -> bool:
 		return false
 
 	var thickness: float = hit.point.distance_to(_from) if hit.inside_start else hit.point.distance_to(exit.point)
-	_power -= _pen.wall_cost(thickness, hit.material)
+	_power -= _pen.wall_cost(thickness, hit.material, _pen.speed_factor(_power))
 	if _power <= 0.0:
 		_shot.impacts.append(hit.point)
 		return false
@@ -177,7 +177,7 @@ func _step_body(hit: DotHitbox.Hit, can_pass: bool) -> bool:
 		_shot.impacts.append(hit.point)
 		return false
 
-	_power -= _pen.body_cost_of(hit.group if m.rules.hitzones else DotHitzone.coarse(hit.group))
+	_power -= _pen.body_cost_of(hit.group if m.rules.hitzones else DotHitzone.coarse(hit.group), _pen.speed_factor(_power))
 	if _power <= 0.0:
 		_shot.impacts.append(hit.point)
 		return false

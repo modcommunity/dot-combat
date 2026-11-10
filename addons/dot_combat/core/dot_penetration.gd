@@ -19,6 +19,10 @@ var max_depth: float = 1.0
 var body_cost: float = 0.0
 ## Per hit-group multiplier on [member body_cost] (a limb costs less than the chest).
 var body_zones: Dictionary = DEFAULT_BODY_ZONES.duplicate()
+## Muzzle speed of the round in m/s. 0 turns the velocity pass off: costs are the plain ones.
+var speed: float = 0.0
+## Speed at which costs are the plain ones; a slower round pays more per metre and per body, a faster one less.
+var reference_speed: float = 0.0
 ## Damage never falls below this share of the original after a pass, while power remains.
 var min_damage: float = 0.0
 ## Most walls and bodies one pellet passes.
@@ -43,13 +47,30 @@ func resistance_of(material: StringName) -> float:
 
 
 ## Power spent crossing [param thickness] metres of [param material].
-func wall_cost(thickness: float, material: StringName) -> float:
-	return thickness * resistance_of(material)
+func wall_cost(thickness: float, material: StringName, speed_factor: float = 1.0) -> float:
+	return thickness * resistance_of(material) * speed_factor
 
 
 ## Power spent crossing a body hit in [param group].
-func body_cost_of(group: StringName) -> float:
-	return body_cost * float(body_zones.get(group, body_zones.get(String(group), 1.0)))
+func body_cost_of(group: StringName, speed_factor: float = 1.0) -> float:
+	return body_cost * float(body_zones.get(group, body_zones.get(String(group), 1.0))) * speed_factor
+
+
+## Speed of the round with [param left] power remaining (kinetic energy goes with the square of speed), 0 when [member speed] is unset.
+func speed_at(left: float) -> float:
+	if speed <= 0.0 or power <= 0.0:
+		return 0.0
+	return speed * sqrt(clampf(left / power, 0.0, 1.0))
+
+
+## Multiplier on wall and body costs for a round with [param left] power: [member reference_speed] over its current speed, within 0.25 to 4. 1 when the velocity pass is off.
+func speed_factor(left: float) -> float:
+	if speed <= 0.0 or reference_speed <= 0.0:
+		return 1.0
+	var now := speed_at(left)
+	if now <= 0.0:
+		return 4.0
+	return clampf(reference_speed / now, 0.25, 4.0)
 
 
 ## Whether a ray meeting [param material] at [param grazing] degrees from the surface bounces.
@@ -72,6 +93,8 @@ func duplicate_scaled(scale: float) -> DotPenetration:
 	p.max_depth = max_depth
 	p.body_cost = body_cost
 	p.body_zones = body_zones
+	p.speed = speed
+	p.reference_speed = reference_speed
 	p.min_damage = min_damage
 	p.max_passes = max_passes
 	p.ricochet_materials = ricochet_materials

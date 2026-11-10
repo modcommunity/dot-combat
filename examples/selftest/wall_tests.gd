@@ -67,6 +67,15 @@ func _test_penetration() -> void:
 	_check(manager.set_cvar("sv_penetration_players", "0") and not manager.penetration_players, "the players cvar applies")
 	manager.penetration_scale = 1.0
 	manager.penetration_enabled = true
+	var fast := DotPenetration.new()
+	fast.power = 1.0
+	fast.speed = 900.0
+	fast.reference_speed = 600.0
+	fast.body_cost = 0.1
+	_check(is_equal_approx(fast.speed_factor(1.0), 600.0 / 900.0), "a round at full power is at muzzle speed, so it pays less than the plain cost")
+	_check(fast.speed_factor(0.25) > fast.speed_factor(1.0), "a spent round is slower and pays more")
+	_check(DotPenetration.new().speed_factor(0.5) == 1.0, "no speed set: the plain cost")
+	_check(fast.body_cost_of(DotHitGroup.CHEST, fast.speed_factor(1.0)) < fast.body_cost_of(DotHitGroup.CHEST), "a fast round spends less power crossing a body")
 	manager.penetration_players = true
 
 	_penetration_bodies(manager, pen, victim)
