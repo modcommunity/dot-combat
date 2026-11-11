@@ -38,6 +38,7 @@ func _test_penetration() -> void:
 	_check(shot.penetrations.size() == 1, "one wall passed is recorded")
 	_check(shot.penetrations[0]["material"] == &"wood", "the record names the material")
 	_close(float(shot.penetrations[0]["thickness"]), 0.4, "and the thickness", 0.05)
+	_close(float(shot.penetrations[0]["cost"]), 0.4, "and the power it spent (thickness * resistance 1)", 0.05)
 	_close(shot.penetrations[0]["entry"].z, -4.8, "entry is on the near face", 0.05)
 	_close(shot.penetrations[0]["exit"].z, -5.2, "exit is on the far face", 0.05)
 	_close(float(shot.damages[0].amount), 25.0 * 0.6, "damage falls with the power the wall spent", 0.8)

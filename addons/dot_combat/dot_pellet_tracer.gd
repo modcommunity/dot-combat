@@ -105,13 +105,14 @@ func _step_world(hit: DotHitbox.Hit, can_pass: bool) -> bool:
 		return false
 
 	var thickness: float = hit.point.distance_to(_from) if hit.inside_start else hit.point.distance_to(exit.point)
-	_power -= _pen.wall_cost(thickness, hit.material, _pen.speed_factor(_power))
+	var cost := _pen.wall_cost(thickness, hit.material, _pen.speed_factor(_power))
+	_power -= cost
 	if _power <= 0.0:
 		_shot.impacts.append(hit.point)
 		return false
 
 	_shot.penetrations.append({
-		"pellet": _pellet, "material": hit.material, "thickness": thickness,
+		"pellet": _pellet, "material": hit.material, "thickness": thickness, "cost": cost,
 		"entry": _from if hit.inside_start else hit.point, "exit": exit.point,
 		"entry_normal": hit.normal, "exit_normal": exit.normal, "sheet": sheet,
 	})
